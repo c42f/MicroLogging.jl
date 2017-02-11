@@ -7,39 +7,62 @@
 
 ## Design goals
 
-A prototype for a new logging frontend for `Base`.  This isn't meant to be a
-fully featured logging framework, just a simple API which allows an efficient
-implementation.  Logging should be unified so that logs from all packages can be
-directed to a common handler in a simple and consistent way.
+A prototype for a new logging frontend for `Base`; perhaps will become
+`BaseLogNext` if people like it :-)  Design goals include:
 
-### Minimalism of user-visible API
+### Minimalism in the user-visible API
 
-Logging should be so simple that you reach for `@info` rather than `println()`.
+Logging should be so simple that you reach for `@info` rather than `println()`:
 
 ```julia
 x = 42
 @info "my value is x = $x"
 ```
 
-but it should be extensible in the backend.
+The frontend shouldn't dictate how best to format log messages; if the user
+needs `@sprintf`, then so be it.
 
 
-### Efficiency aims - messages you don't see are "free"
+### Extensible log handlers and simple configuration
 
-* Early-out to avoid formatting when the message will be filtered.  With the
-  default of a per-module `Logger`, designed such that invisible messages cost
-  only a load, integer compare and branch.
-* Ability to eliminate entire levels of verbose messages as dead code at compile
-  time (?)
+Users must be able to intercept logging from all logging contexts in a simple
+unified way, and send it to a user-defined log handler:
 
-### Custom log formatters and backends
+```julia
+configure_logging(handler=MyLogHandler())
+```
 
-* Module based log level control in a heirarchy for ease of use.
-* Log pieces (module, message, file location, custom key/value pairs?) passed to
-  backend for custom formatting
-* Non-Base logging frameworks should be able to define backends to send logs to:
-  stdout/stderr, files, the network, etc.
-* The backend should be swappable, such that all packages using the frontend
-  logger get logs redirected there.
+For this to work, loggers from across the system must be somehow registered.  A
+standard way to do this is with a hierarchy of loggers; each logger handles
+basic filtering and dispatch of messages for a given context.  From some
+experience with python's logger, a generally desired unit of **logging context**
+granularity is the module.  Thus, logger macros should log to the current module
+logger by default.
 
+
+### Efficiency - messages you never see should cost almost nothing
+
+There should be an extremely early bailout to avoid formatting messages which
+will later be filtered out.  Ideally, the cost of a filtered message would be an
+integer load, comparison and predictable branch based on the log level. Thus,
+users should feel free to write code such as
+
+```julia
+@debug begin
+    A = #=Long, complex calculation=#
+    "det(A) = $(det(A))"
+end
+```
+
+knowing that efficiency won't suffer unless they enable `Debug` level logging.
+
+
+### Design TODOs:
+
+* Do we want custom log levels?
+* Should we support arbitrary user supplied key-value pairs as log record data,
+  in addition to the message string and parameters extracted from the call site?
+* It would be fairly easy to add the ability to eliminate entire levels of
+  custom verbose debug messages as dead code at compile time on a per-module
+  basis, by putting a minimum level into the Logger type.
 

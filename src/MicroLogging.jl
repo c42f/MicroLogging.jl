@@ -2,11 +2,16 @@ module MicroLogging
 
 export Logger,
     @debug, @info, @warn, @error,
-    @makelogger,
-    root_logger, configure_logging
+    get_logger, configure_logging
 
 
 #-------------------------------------------------------------------------------
+"""
+    LogHandler(stream::IO, [usecolor=true])
+
+Simplistic handler for logging to a text stream, with basic per-level color
+support.
+"""
 immutable LogHandler
     stream::IO
     usecolor::Bool
@@ -14,11 +19,11 @@ end
 
 LogHandler(stream::IO) = LogHandler(stream, true)
 
-function logmsg(handler::LogHandler, loggername, level, location, msg)
-    if     level == Debug ; color = :cyan       ; levelstr = "DEBUG:"
-    elseif level == Info  ; color = :blue       ; levelstr = "INFO :"
-    elseif level == Warn  ; color = :yellow     ; levelstr = "WARN :"
-    elseif level == Error ; color = :red        ; levelstr = "ERROR:"
+function logmsg(handler::LogHandler, context, level, location, msg)
+    if     level <= Debug ; color = :cyan       ; levelstr = "DEBUG:"
+    elseif level <= Info  ; color = :blue       ; levelstr = "INFO:"
+    elseif level <= Warn  ; color = :yellow     ; levelstr = "WARN:"
+    elseif level <= Error ; color = :red        ; levelstr = "ERROR:"
     else                    color = :dark_white ; levelstr = string(level)
     end
     if handler.usecolor
@@ -26,50 +31,120 @@ function logmsg(handler::LogHandler, loggername, level, location, msg)
     else
         print(handler.stream, levelstr)
     end
-    fullmsg = " [($(loggername)) $(location[1]):$(location[2])]: $msg\n"
+    fullmsg = " [($(context)) $(location[1]):$(location[2])]: $msg\n"
     Base.print(handler.stream, fullmsg)
 end
 
 
 
 #-------------------------------------------------------------------------------
+# TODO: Do we need user-defined log levels ?
 abstract AbstractLogLevel
 
+"""
+Predefined log levels, for fast log filtering
+"""
 immutable LogLevel <: AbstractLogLevel
     level::Int
 end
-const Debug = LogLevel(-10)
-const Info  = LogLevel(0)
-const Warn  = LogLevel(10)
-const Error = LogLevel(20)
+const Debug = LogLevel(0)
+const Info  = LogLevel(10)
+const Warn  = LogLevel(20)
+const Error = LogLevel(30)
 
 Base.:<=(l1::LogLevel, l2::LogLevel) = l1.level <= l2.level
 
 
 
 #-------------------------------------------------------------------------------
-type Logger{L}
-    name::Symbol
-    min_level::L
+# TODO: Decide whether to parameterize type on a MinLevel, for dead code elim
+# of custom verbose levels
+type Logger{L<:AbstractLogLevel}
+    context        # Indicator of context in which the log event happened; usually a julia module
+    min_level::L   # TODO: Hardcode L === LogLevel?
     handler
-    children::Vector{Logger}
+    children::Vector{Any}
 end
 
-Logger{L}(name, parent::Logger{L}) = Logger{L}(Symbol(name), parent.min_level,
-                                               parent.handler, Vector{Module}())
-Logger(name, handler, level=Info) = Logger{typeof(level)}(Symbol(name), level,
-                                                          handler, Vector{Module}())
-const _root_logger = Logger(:Main, LogHandler(STDERR))
+Logger{L}(context, parent::Logger{L}) =
+    Logger{L}(context, parent.min_level, parent.handler, Vector{Any}())
+
+Logger(context, level, handler) =
+    Logger{typeof(level)}(context, level, handler, Vector{Any}())
 
 Base.push!(parent::Logger, child) = push!(parent.children, child)
 
-const logger = _root_logger
-root_logger() = _root_logger
+log_to_handler(logger::Logger, level, location, msg) =
+    logmsg(logger.handler, logger.context, level, location, msg)
 
-function configure_logging(; kwargs...)
-    configure_logging(root_logger(); kwargs...)
+"""
+    shouldlog(logger, level)
+
+Determine whether messages of severity `level` should be sent to `logger`.
+"""
+shouldlog(logger::Logger, level) = logger.min_level <= level
+
+
+# Logging macros
+for (mname, level) in [(:debug, Debug),
+                       (:info, Info),
+                       (:warn, Warn),
+                       (:error, Error)]
+    @eval macro $mname(exs...)
+        if length(exs) == 1
+            logger_ex = get_logger(current_module())
+            msg = esc(exs[1])
+        elseif length(exs) == 2
+            logger_ex = esc(exs[1])
+            msg = esc(exs[2])
+        else
+            # TODO: User-defined key-value pairs?
+            error("@$mname must be called with one or two arguments")
+        end
+        quote
+            logger = $logger_ex
+            if shouldlog(logger, $($level))
+                # TODO: Add current_module() here explicitly as extra location context?
+                log_to_handler(logger, $($level), (@__FILE__, @__LINE__), $msg)
+            end
+            nothing
+        end
+    end
 end
 
+
+#-------------------------------------------------------------------------------
+# All registered module loggers
+const _registered_loggers = Dict{Module,Any}(
+    Main=>Logger(Main, Info, LogHandler(STDERR))
+)
+
+"""
+    get_logger(module)
+
+Get the logger which will be used from within `module`, creating it and adding
+it to the logging heirarchy if it doesn't yet exist.  The logger heirarchy is
+taken from the module heirarchy.
+"""
+# TODO: Allow code contexts other than Module?
+function get_logger(mod::Module=Main)
+    get!(_registered_loggers, mod) do
+        parent = get_logger(module_parent(mod))
+        logger = Logger(mod, parent)
+        push!(parent, logger)
+        logger
+    end
+end
+
+# TODO: @set_logger MyLogger
+
+#-------------------------------------------------------------------------------
+# Log system config
+"""
+    configure_logging([module|logger]; level=l, handler=h)
+
+Configure logging system
+"""
 function configure_logging(logger; level=nothing, handler=nothing)
     if level !== nothing
         logger.min_level = level
@@ -82,73 +157,10 @@ function configure_logging(logger; level=nothing, handler=nothing)
     end
 end
 
-function configure_logging(m::Module; kwargs...)
-    mod = find_logger_module(m)
-    configure_logging(mod.logger; kwargs...)
-end
-
-
-shouldlog(logger::Logger, level) = logger.min_level <= level
-
-logmsg(logger::Logger, level, location, msg) = logmsg(logger.handler, logger.name, level, location, msg)
-
-
-function find_logger_module(m::Module)
-    while module_name(m) !== :Main
-        if isdefined(m, :logger)
-            return m
-        end
-        m = module_parent(m)
-    end
-    return MicroLogging
-end
-
-
-# Logging macros
-for (mname, level) in [(:debug, Debug),
-                       (:info, Info),
-                       (:warn, Warn),
-                       (:error, Error)]
-    @eval macro $mname(exs...)
-        if length(exs) == 1
-            mod = find_logger_module(current_module())
-            logger_ex = :($mod.logger)
-            msg = esc(exs[1])
-        elseif length(exs) == 2
-            logger_ex = esc(exs[1])
-            msg = esc(exs[2])
-        else
-            error("@$mname must be called with one or two arguments")
-        end
-        quote
-            logger = $logger_ex
-            if shouldlog(logger, $($level))
-                logmsg(logger, $($level), (@__FILE__, @__LINE__), $msg)
-            end
-            nothing
-        end
-    end
-end
+configure_logging(mod::Module=Main; kwargs...) = configure_logging(get_logger(mod); kwargs...)
 
 
 #-------------------------------------------------------------------------------
-# Create per-module logger
-
-
-"""
-Create a logger for the current module
-"""
-macro makelogger()
-    modname = string(current_module())
-    parent_logger = find_logger_module(module_parent(current_module())).logger
-    esc(
-    quote
-        const logger = Logger($modname, $parent_logger)
-        push!($parent_logger, logger)
-    end
-    )
-end
-
 
 #=
 macro logtrace(func)
