@@ -21,8 +21,8 @@ LogHandler(stream::IO) = LogHandler(stream, true)
 
 function logmsg(handler::LogHandler, context, level, location, msg)
     if     level <= Debug ; color = :cyan       ; levelstr = "DEBUG:"
-    elseif level <= Info  ; color = :blue       ; levelstr = "INFO:"
-    elseif level <= Warn  ; color = :yellow     ; levelstr = "WARN:"
+    elseif level <= Info  ; color = :blue       ; levelstr = "INFO: "
+    elseif level <= Warn  ; color = :yellow     ; levelstr = "WARN: "
     elseif level <= Error ; color = :red        ; levelstr = "ERROR:"
     else                    color = :dark_white ; levelstr = string(level)
     end
@@ -31,7 +31,8 @@ function logmsg(handler::LogHandler, context, level, location, msg)
     else
         print(handler.stream, levelstr)
     end
-    fullmsg = " [($(context)) $(location[1]):$(location[2])]: $msg\n"
+    filename = location[1] === nothing ? "REPL" : basename(location[1])
+    fullmsg = " [$(context):$(filename):$(location[2])]: $msg\n"
     Base.print(handler.stream, fullmsg)
 end
 
