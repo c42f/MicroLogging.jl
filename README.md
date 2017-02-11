@@ -4,6 +4,46 @@
 
 [![codecov.io](http://codecov.io/github/c42f/MicroLogging.jl/coverage.svg?branch=master)](http://codecov.io/github/c42f/MicroLogging.jl?branch=master)
 
+## Quickstart
+
+```julia
+module LogIt
+
+using MicroLogging
+
+function f(x)
+    @debug "enabled $x"
+    @info  "enabled $x"
+    @warn  "enabled $x"
+    @error "enabled $x"
+end
+
+end
+
+
+using MicroLogging
+
+@info "Default level is info"
+@debug "I am an invisible debug message"
+
+configure_logging(LogIt, level=MicroLogging.Warn)
+@info "Logging at Warn for LogIt module"
+LogIt.f(1)
+
+@info "Set all loggers to Debug level"
+configure_logging(level=MicroLogging.Debug)
+LogIt.f(2)
+
+
+@info "Redirect logging to a file"
+logfile = open("log.txt", "w")
+configure_logging(level=MicroLogging.Info,
+                  handler=MicroLogging.LogHandler(logfile, false))
+@info "Logging redirected to a file"
+LogIt.f(3)
+close(logfile)
+```
+
 
 ## Design goals
 
