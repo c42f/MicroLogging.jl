@@ -102,11 +102,14 @@ for (mname, level) in [(:debug, Debug),
             # TODO: User-defined key-value pairs?
             error("@$mname must be called with one or two arguments")
         end
+        # FIXME: The following dubious hack gives an approximate line number
+        # only!  See #1
+        lineno = Int(unsafe_load(cglobal(:jl_lineno, Cint)))
         quote
             logger = $logger_ex
             if shouldlog(logger, $($level))
                 # TODO: Add current_module() here explicitly as extra location context?
-                log_to_handler(logger, $($level), (@__FILE__, @__LINE__), $msg)
+                log_to_handler(logger, $($level), (@__FILE__, $lineno), $msg)
             end
             nothing
         end
