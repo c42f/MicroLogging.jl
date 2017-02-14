@@ -7,33 +7,48 @@ export Logger,
 
 #-------------------------------------------------------------------------------
 """
-    LogHandler(stream::IO, [usecolor=true])
+    LogHandler(stream::IO, [interactive_style=isinteractive()])
 
 Simplistic handler for logging to a text stream, with basic per-level color
 support.
 """
 immutable LogHandler
     stream::IO
-    usecolor::Bool
+    interactive_style::Bool
 end
 
-LogHandler(stream::IO) = LogHandler(stream, true)
+LogHandler(stream::IO) = LogHandler(stream, isinteractive())
 
 function logmsg(handler::LogHandler, context, level, location, msg)
-    if     level <= Debug ; color = :cyan       ; levelstr = "DEBUG:"
-    elseif level <= Info  ; color = :blue       ; levelstr = "INFO: "
-    elseif level <= Warn  ; color = :yellow     ; levelstr = "WARN: "
-    elseif level <= Error ; color = :red        ; levelstr = "ERROR:"
-    else                    color = :dark_white ; levelstr = string(level)
-    end
-    if handler.usecolor
-        Base.print_with_color(color, handler.stream, levelstr)
-    else
-        print(handler.stream, levelstr)
-    end
     filename = location[1] === nothing ? "REPL" : basename(location[1])
-    fullmsg = " [$(context):$(filename):$(location[2])]: $msg\n"
-    Base.print(handler.stream, fullmsg)
+    if handler.interactive_style
+        if     level <= Debug ; color = :cyan       ; bold = false; levelstr = "- DEBUG"
+        elseif level <= Info  ; color = :blue       ; bold = false; levelstr = "-- INFO"
+        elseif level <= Warn  ; color = :yellow     ; bold = true ; levelstr = "-- WARN"
+        elseif level <= Error ; color = :red        ; bold = true ; levelstr = "- ERROR"
+        else                    color = :dark_white ; bold = false; levelstr = "- $level"
+        end
+        # Attempt at avoiding the problem of distracting metadata in info log
+        # messages - print metadata to the right hand side.
+        metastr = "[$(context):$(filename):$(location[2])] $levelstr"
+        msg = rstrip(msg, '\n')
+        for (i,msgline) in enumerate(split(msg, '\n'))
+            # TODO: This API is inconsistent between 0.5 & 0.6 - fix the bold stuff if possible.
+            print_with_color(color, handler.stream, msgline)
+            if i == 2
+                metastr = "..."
+            end
+            nspace = max(1, displaysize(handler.stream)[2] - (length(msgline) + length(metastr)))
+            print(handler.stream, " "^nspace)
+            print_with_color(color, handler.stream, metastr)
+            print(handler.stream, "\n")
+        end
+    else
+        print(handler.stream, "$level [$(context):$(filename):$(location[2])]: $msg")
+        if !endswith(msg, '\n')
+            print(handler.stream, '\n')
+        end
+    end
 end
 
 
@@ -55,6 +70,14 @@ const Error = LogLevel(30)
 
 Base.:<=(l1::LogLevel, l2::LogLevel) = l1.level <= l2.level
 
+function Base.show(io::IO, level::LogLevel)
+    if     level == Debug ; print(io, "Debug")
+    elseif level == Info  ; print(io, "Info")
+    elseif level == Warn  ; print(io, "Warn")
+    elseif level == Error ; print(io, "Error")
+    else                    print(io, "LogLevel($level.level)")
+    end
+end
 
 
 #-------------------------------------------------------------------------------
@@ -67,7 +90,7 @@ type Logger{L<:AbstractLogLevel}
     children::Vector{Any}
 end
 
-Logger{L}(context, parent::Logger{L}) =
+Logger{L}(context, parent::Logger{L}=get_logger(current_module())) =
     Logger{L}(context, parent.min_level, parent.handler, Vector{Any}())
 
 Logger(context, level, handler) =
