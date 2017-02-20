@@ -4,6 +4,58 @@
 
 [![codecov.io](http://codecov.io/github/c42f/MicroLogging.jl/coverage.svg?branch=master)](http://codecov.io/github/c42f/MicroLogging.jl?branch=master)
 
+
+## Design goals
+
+A prototype for a new logging API for `Base` in julia-0.7.
+
+### Simplicity for most users
+
+Logging should be so simple that you reach for `info` rather than `println()`.
+
+* Zero logger setup for simple uses.
+* Freedom in formatting the log message.  Simple string interpolation,
+  `@sprintf` and `fmt()`, etc should all be fine.
+* Context information for log messages should be automatically gathered without
+  a syntax burden. For example, the file, line number, module, stack trace, etc.
+* It should be simple to filter log messages.
+* A clear guideline about the meaning and appropriate use of standard log
+  levels.
+
+
+### Flexibility for advanced users
+
+* For *all* packages using the standard logging API, it should be simple to
+  intercept, filter and redirect logs a unified way.
+* Log records are more than a string: loggers typically gather context
+  information both lexically (eg, module, file name, line number) and
+  dynamically (eg, time, stack trace, thread id).
+* Formatting and dispatch of log records should be in the hands of the user if
+  they need it. For example, a log handler library may need to write json
+  records across the network to a log server.
+* It should be possible to log in a user defined log context if necessary as
+  automatically choosing a context may not suit all cases.  For example, if the
+  module is chosen as the default context, users may want to be more specific.
+  Users may also want to log in the context of a data structure rather than
+  using the lexical scope, particularly in multithreaded cases.
+
+Possible extensions
+* User-defined log levels ?
+* User-supplied key-value pairs for additional log context?
+
+
+### Efficiency - messages you never see should cost almost nothing
+
+The cost of basic log filtering should be so cheap that people are happy to
+leave complex debug logging in place, to be turned on if necessary.  Cost
+comes in two flavours:
+
+* Cost in user code, to construct quantities which will only be used in the
+  log message.
+* Cost in the logging library, to determine whether to filter the message.
+
+
+
 ## Quickstart
 
 ```julia
@@ -45,47 +97,45 @@ close(logfile)
 ```
 
 
-## Design goals
+## MicroLogging implementation choices
 
-A prototype for a new logging frontend for `Base`; perhaps will become
-`BaseLogNext` if people like it :-)  Design goals include:
+### Logging macros
 
-### Minimalism in the user-visible API
+Efficiency seems to dictate that some portion of log filtering be done *before*
+any logging-specific user code is run. This implies either logging macros to
+insert an early test and branch, or that the message formatting work is passed
+as a closure. We'd also like to gather information from lexical scope, and to
+look up the logger statically if possible.
 
-Logging should be so simple that you reach for `@info` rather than `println()`:
+These considerations seem to indicate that a macro be used, which also has the
+nice side effect of being visually simple:
 
 ```julia
 x = 42
 @info "my value is x = $x"
 ```
 
-The frontend shouldn't dictate how best to format log messages; if the user
-needs `@sprintf`, then so be it.
+### Logging context
+
+From some experience with python's logger, a generally desired unit of
+**logging context** granularity is the module.  Thus, logger macros should log
+to the current module logger by default.
 
 
-### Extensible log handlers and simple configuration
+### Configuration
 
-Users must be able to intercept logging from all logging contexts in a simple
-unified way, and send it to a user-defined log handler:
+For simple catchall configuration to work, we need some kind of registry of
+logger instances for all logging contexts.  A standard way to do this is with a
+hierarchy of loggers; each logger handles basic filtering and dispatch of
+messages for a given context.
 
 ```julia
 configure_logging(handler=MyLogHandler())
 ```
 
-For this to work, loggers from across the system must be somehow registered.  A
-standard way to do this is with a hierarchy of loggers; each logger handles
-basic filtering and dispatch of messages for a given context.  From some
-experience with python's logger, a generally desired unit of **logging context**
-granularity is the module.  Thus, logger macros should log to the current module
-logger by default.
-
-
 ### Efficiency - messages you never see should cost almost nothing
 
-There should be an extremely early bailout to avoid formatting messages which
-will later be filtered out.  Ideally, the cost of a filtered message would be an
-integer load, comparison and predictable branch based on the log level. Thus,
-users should feel free to write code such as
+The following should be fast
 
 ```julia
 @debug begin
@@ -94,15 +144,5 @@ users should feel free to write code such as
 end
 ```
 
-knowing that efficiency won't suffer unless they enable `Debug` level logging.
-
-
-### Design TODOs:
-
-* Do we want custom log levels?
-* Should we support arbitrary user supplied key-value pairs as log record data,
-  in addition to the message string and parameters extracted from the call site?
-* It would be fairly easy to add the ability to eliminate entire levels of
-  custom verbose debug messages as dead code at compile time on a per-module
-  basis, by putting a minimum level into the Logger type.
+... FIXME more to write here
 
