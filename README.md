@@ -9,16 +9,17 @@
 
 A prototype for a new logging API for `Base` in julia-0.7.
 
-### Simplicity for most users
+### Simplicity
 
-Logging should be so simple that you reach for `info` rather than `println()`.
+Logging should be simple enough that you can reach for `info` rather than
+`println()`.
 
 * Zero logger setup for simple uses.
 * Freedom in formatting the log message.  Simple string interpolation,
   `@sprintf` and `fmt()`, etc should all be fine.
 * Context information for log messages should be automatically gathered without
   a syntax burden. For example, the file, line number, module, stack trace, etc.
-* It should be simple to filter log messages.
+* It should be simple to control the filtering of log messages.
 * A clear guideline about the meaning and appropriate use of standard log
   levels.
 
@@ -33,10 +34,10 @@ Logging should be so simple that you reach for `info` rather than `println()`.
 * Formatting and dispatch of log records should be in the hands of the user if
   they need it. For example, a log handler library may need to write json
   records across the network to a log server.
-* It should be possible to log in a user defined log context if necessary as
+* It should be possible to log in a user defined log context if necessary, as
   automatically choosing a context may not suit all cases.  For example, if the
   module is chosen as the default context, users may want to be more specific.
-  Users may also want to log in the context of a data structure rather than
+  Users may also want to have a logger context per data structure rather than
   using the lexical scope, particularly in multithreaded cases.
 
 Possible extensions
@@ -48,18 +49,26 @@ Possible extensions
 
 The cost of basic log filtering should be so cheap that people are happy to
 leave complex debug logging in place, to be turned on if necessary.  Cost
-comes in two flavours:
+comes in three flavours:
 
 * Cost in user code, to construct quantities which will only be used in the
   log message.
-* Cost in the logging library, to determine whether to filter the message.
+* Cost in the logging library, to determine whether to filter a message.
+* Cost in the logging library of collecting context information and
+  to dispatch/format log records.
 
 
 
 ## Quickstart
 
 ```julia
-module LogIt
+
+using MicroLogging
+
+@info "Default level is info"
+@debug "I am an invisible debug message"
+
+module LogTest
 
 using MicroLogging
 
@@ -72,27 +81,37 @@ end
 
 end
 
-
-using MicroLogging
-
-@info "Default level is info"
-@debug "I am an invisible debug message"
-
-configure_logging(LogIt, level=MicroLogging.Warn)
-@info "Logging at Warn for LogIt module"
-LogIt.f(1)
+configure_logging(LogTest, level=MicroLogging.Warn)
+@info "Logging at Warn for LogTest module"
+LogTest.f(1)
 
 @info "Set all loggers to Debug level"
 configure_logging(level=MicroLogging.Debug)
-LogIt.f(2)
+LogTest.f(2)
 
+@info """
+A big
+log
+message
+in a
+multiline
+string
+"""
+
+for i=1:10
+    if i > 7
+        @warn "i=$i out of bounds"
+        continue
+    end
+    @info "The value of (1+i) is $(1+i)"
+end
 
 @info "Redirect logging to a file"
 logfile = open("log.txt", "w")
 configure_logging(level=MicroLogging.Info,
                   handler=MicroLogging.LogHandler(logfile, false))
 @info "Logging redirected to a file"
-LogIt.f(3)
+LogTest.f(3)
 close(logfile)
 ```
 
