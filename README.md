@@ -4,60 +4,8 @@
 
 [![codecov.io](http://codecov.io/github/c42f/MicroLogging.jl/coverage.svg?branch=master)](http://codecov.io/github/c42f/MicroLogging.jl?branch=master)
 
-
-## Design goals
-
-A prototype for a new logging interface for `Base` in julia-0.7.  The design
-goals fit into three rough categories - simplicity, flexibility and efficiency.
-
-Logging should be **simple to use** so that package authors can reach for `info`
-rather than `println()`.  We should have:
-
-* A minimum of syntax - ideally just a logger verb and the message in most
-  cases.  Context information for log messages (file name, line number, module,
-  stack trace, etc.) should be automatically gathered without a syntax burden.
-* Freedom in formatting the log message - simple string interpolation,
-  `@sprintf` and `fmt()`, etc should all be fine.
-* Zero logger setup for simple uses.
-* Easy filtering of log messages.
-* Clear guidelines about the meaning and appropriate use of standard log levels
-  for consistency between packages, along with guiding the appropriate use of
-  logging vs stdout.
-* To encourage the use of logging over ad-hoc console output, the default
-  console log handler should emphasize the *log message*, and metadata should be
-  printed in a non-intrusive way.
-
-
-The API should be **flexibile enough** for advanced users:
-
-* For all packages using the standard logging API, it should be simple to
-  intercept, filter and redirect logs in a unified and centrally controlled way.
-* Log records are more than a string: loggers typically gather context
-  information both lexically (eg, module, file name, line number) and
-  dynamically (eg, time, stack trace, thread id).
-* Formatting and dispatch of log records should be in the hands of the user if
-  they need it. For example, a log handler library may need to write json
-  records across the network to a log server.
-* It should be possible to log to a user defined log context; automatically
-  choosing a context for zero setup logging may not suit all cases.  For
-  example, in some cases we may want to use a log context explicitly attached to
-  a user-defined data structure.
-* Possible extensions
-    * User supplied `key=value` pairs for additional log context?
-    * Support for user defined log levels ?
-
-
-The design should allow for an **efficient implementation**, to encourage
-the availability of logging in production systems; logs you don't see should be
-almost free, and logs you do see should be cheap to produce. The runtime cost
-comes in three flavours:
-
-* Cost in the logging library, to determine whether to filter a message.
-* Cost in user code, to construct quantities which will only be used in the
-  log message.
-* Cost in the logging library in collecting context information and
-  to dispatch and format log records.
-
+A prototype for a new logging interface for `Base` in julia-0.7.  For design
+discussion see the Julep - https://github.com/JuliaLang/Juleps/pull/30/files
 
 
 ## Quickstart
