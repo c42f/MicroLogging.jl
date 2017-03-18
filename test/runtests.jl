@@ -9,16 +9,11 @@ end
 
 TestHandler() = TestHandler(Vector{Any}())
 
-function MicroLogging.logmsg(handler::TestHandler, context, level, location, msg)
+function MicroLogging.logmsg(handler::TestHandler, context, level, msg; kwargs...)
     push!(handler.messages, (context, level, msg))
 end
 
-function foo(x)
-    @debug "foo($x)"
-    @info  "foo($x)"
-    @warn  "foo($x)"
-    @error "foo($x)"
-end
+@testset "MicroLogging" begin
 
 #-------------------------------------------------------------------------------
 @testset "Basic logging" begin
@@ -27,36 +22,85 @@ end
     configure_logging(handler=handler)
 
     configure_logging(level=Debug)
-    foo(1)
-    @test handler.messages == [(Main, Debug, "foo(1)"),
-                               (Main, Info , "foo(1)"),
-                               (Main, Warn , "foo(1)"),
-                               (Main, Error, "foo(1)")]
+    @debug "a"
+    @info  "b"
+    @warn  "c"
+    @error "d"
+    @test handler.messages == [(Main, Debug, "a"),
+                               (Main, Info , "b"),
+                               (Main, Warn , "c"),
+                               (Main, Error, "d")]
     empty!(handler.messages)
 
     configure_logging(level=MicroLogging.Info)
-    foo(2)
-    @test handler.messages == [(Main, Info , "foo(2)"),
-                               (Main, Warn , "foo(2)"),
-                               (Main, Error, "foo(2)")]
+    @debug "a"
+    @info  "b"
+    @warn  "c"
+    @error "d"
+    @test handler.messages == [(Main, Info , "b"),
+                               (Main, Warn , "c"),
+                               (Main, Error, "d")]
     empty!(handler.messages)
 
     configure_logging(level=MicroLogging.Warn)
-    foo(3)
-    @test handler.messages == [(Main, Warn , "foo(3)"),
-                               (Main, Error, "foo(3)")]
+    @debug "a"
+    @info  "b"
+    @warn  "c"
+    @error "d"
+    @test handler.messages == [(Main, Warn , "c"),
+                               (Main, Error, "d")]
     empty!(handler.messages)
 
     configure_logging(level=MicroLogging.Error)
-    foo(4)
-    @test handler.messages == [(Main, Error, "foo(4)")]
+    @debug "a"
+    @info  "b"
+    @warn  "c"
+    @error "d"
+    @test handler.messages == [(Main, Error, "d")]
     empty!(handler.messages)
 
 end
 
 #-------------------------------------------------------------------------------
+
+@testset "Log to custom logger" begin
+    handler = TestHandler()
+    logger = Logger(:TestContext, MicroLogging.Debug, handler)
+
+    @debug logger "a"
+    @info  logger "b"
+    @warn  logger "c"
+    @error logger "d"
+
+    @test handler.messages == [(:TestContext, Debug, "a"),
+                               (:TestContext, Info , "b"),
+                               (:TestContext, Warn , "c"),
+                               (:TestContext, Error, "d")]
+end
+
+
+@testset "Log message formatting" begin
+    handler = TestHandler()
+    logger = Logger(:TestContext, MicroLogging.Info, handler)
+
+    # Message may be formatted any way the user pleases
+    @info logger begin
+        A = ones(4,4)
+        "sum(A) = $(sum(A))"
+    end
+    i = 10.50
+    @info logger "$i"
+    @info logger @sprintf("%.3f", i)
+
+    @test handler.messages == [(:TestContext, Info, "sum(A) = 16.0"),
+                               (:TestContext, Info, "10.5"),
+                               (:TestContext, Info, "10.500")]
+end
+
+
+#-------------------------------------------------------------------------------
 # Heirarchy
-module A
+@eval module A
     using MicroLogging
 
     function a()
@@ -179,3 +223,5 @@ println()
 Foo.Bar.baz()
 
 =#
+
+end
