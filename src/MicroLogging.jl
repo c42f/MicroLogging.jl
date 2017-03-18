@@ -19,7 +19,7 @@ end
 
 LogHandler(stream::IO) = LogHandler(stream, isinteractive())
 
-function logmsg(handler::LogHandler, context, level, location, msg)
+function logmsg(handler::LogHandler, context, level, msg; location=("",0), kwargs...)
     filename = location[1] === nothing ? "REPL" : basename(location[1])
     if handler.interactive_style
         if     level <= Debug ; color = :cyan       ; bold = false; levelstr = "- DEBUG"
@@ -98,8 +98,8 @@ Logger(context, level, handler) =
 
 Base.push!(parent::Logger, child) = push!(parent.children, child)
 
-log_to_handler(logger::Logger, level, location, msg) =
-    logmsg(logger.handler, logger.context, level, location, msg)
+log_to_handler(logger::Logger, level, msg; kwargs...) =
+    logmsg(logger.handler, logger.context, level, msg; kwargs...)
 
 """
     shouldlog(logger, level)
@@ -108,31 +108,46 @@ Determine whether messages of severity `level` should be sent to `logger`.
 """
 shouldlog(logger::Logger, level) = logger.min_level <= level
 
+function match_log_macro_exprs(exs, context, macroname)
+    # Match key,value pairs
+    args = Any[]
+    kwargs = Any[]
+    for ex in exs
+        if isa(ex,Expr) && ex.head == :(=)
+            isa(ex.args[1], Symbol) || throw(ArgumentError("Expected key value pair, got $ex"))
+            push!(kwargs, Expr(:kw, ex.args[1], esc(ex.args[2])))
+        else
+            push!(args, ex)
+        end
+    end
+    if length(args) == 1
+        logger_ex = get_logger(context)
+        msg = esc(args[1])
+    elseif length(args) == 2
+        logger_ex = esc(args[1])
+        msg = esc(args[2])
+    else
+        error("@$macroname must be called with one or two arguments")
+    end
+    logger_ex, msg, kwargs
+end
 
 # Logging macros
-for (mname, level) in [(:debug, Debug),
-                       (:info, Info),
-                       (:warn, Warn),
-                       (:error, Error)]
-    @eval macro $mname(exs...)
-        if length(exs) == 1
-            logger_ex = get_logger(current_module())
-            msg = esc(exs[1])
-        elseif length(exs) == 2
-            logger_ex = esc(exs[1])
-            msg = esc(exs[2])
-        else
-            # TODO: User-defined key-value pairs?
-            error("@$mname must be called with one or two arguments")
-        end
+for (macroname, level) in [(:debug, Debug),
+                           (:info,  Info),
+                           (:warn,  Warn),
+                           (:error, Error)]
+    @eval macro $macroname(exs...)
+        mod = current_module()
+        logger_ex, msg, kwargs = match_log_macro_exprs(exs, mod, $(Expr(:quote, macroname)))
         # FIXME: The following dubious hack gives an approximate line number
-        # only!  See #1
+        # only - the line of the start of the toplevel expression! See #1.
         lineno = Int(unsafe_load(cglobal(:jl_lineno, Cint)))
         quote
             logger = $logger_ex
             if shouldlog(logger, $($level))
-                # TODO: Add current_module() here explicitly as extra location context?
-                log_to_handler(logger, $($level), (@__FILE__, $lineno), $msg)
+                log_to_handler(logger, $($level), $msg;
+                    module_=$mod, location=(@__FILE__, $lineno), $(kwargs...))
             end
             nothing
         end
