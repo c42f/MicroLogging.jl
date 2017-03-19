@@ -55,12 +55,12 @@ end
 
 #-------------------------------------------------------------------------------
 # TODO: Do we need user-defined log levels ?
-abstract AbstractLogLevel
+# abstract AbstractLogLevel
 
 """
 Predefined log levels, for fast log filtering
 """
-immutable LogLevel <: AbstractLogLevel
+immutable LogLevel
     level::Int
 end
 const Debug = LogLevel(0)
@@ -83,18 +83,17 @@ end
 #-------------------------------------------------------------------------------
 # TODO: Decide whether to parameterize type on a MinLevel, for dead code elim
 # of custom verbose levels
-type Logger{L<:AbstractLogLevel}
+type Logger
     context        # Indicator of context in which the log event happened; usually a julia module
-    min_level::L   # TODO: Hardcode L === LogLevel?
+    min_level::LogLevel
     handler
     children::Vector{Any}
 end
 
-Logger{L}(context, parent::Logger{L}=get_logger(current_module())) =
-    Logger{L}(context, parent.min_level, parent.handler, Vector{Any}())
+Logger(context, parent::Logger=get_logger(current_module())) =
+    Logger(context, parent.min_level, parent.handler, Vector{Any}())
 
-Logger(context, level, handler) =
-    Logger{typeof(level)}(context, level, handler, Vector{Any}())
+Logger(context, level, handler) = Logger(context, level, handler, Vector{Any}())
 
 Base.push!(parent::Logger, child) = push!(parent.children, child)
 
