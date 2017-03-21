@@ -44,3 +44,17 @@ for i=1:10
     end
     @info "The value of (1+i) is $(1+i)"
 end
+
+
+@info "Basic progress logging"
+for i=1:100
+    sleep(0.02)
+    i%20 != 0 || @warn "foo"
+    @info "task1" progress=i/100
+end
+
+#@debug "Progress logging also at debug level"
+for i=1:100
+    sleep(0.02)
+    @debug "task2" progress=i/100
+end
