@@ -156,21 +156,5 @@ end
 configure_logging(mod::Module=Main; kwargs...) = configure_logging(get_logger(mod); kwargs...)
 
 
-#-------------------------------------------------------------------------------
-
-#=
-macro logtrace(func)
-    assert(isa(func, Expr) && func.head == :function && func.args[2].head == :block)
-    enter_msg = "Enter $(func.args[1].args[1])"
-    exit_msg = "Exit $(func.args[1].args[1])"
-    unshift!(func.args[2].args, :(MicroLogging.@trace $enter_msg))
-    push!(func.args[2].args, :(MicroLogging.@trace $exit_msg))
-    esc(func)
 end
-=#
-
-end
-
-
-
 
