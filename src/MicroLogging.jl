@@ -101,7 +101,8 @@ for (macroname, level) in [(:debug, Debug),
             logger = $logger_ex
             if shouldlog(logger, $($level))
                 log_to_handler(logger, $($level), $msg;
-                    module_=$mod, location=(@__FILE__, $lineno), $(kwargs...))
+                    id=gensym(), module_=$mod, location=(@__FILE__, $lineno),
+                    $(kwargs...))
             end
             nothing
         end
