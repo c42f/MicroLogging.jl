@@ -32,8 +32,8 @@ Logger(level::LogLevel, handler) = Logger(level, handler, Vector{Any}())
 
 Base.push!(parent::Logger, child) = push!(parent.children, child)
 
-log_to_handler(logger::Logger, level, msg; kwargs...) =
-    logmsg(logger.handler, level, msg; kwargs...)
+handlelog(logger::Logger, level, msg; kwargs...) =
+    handlelog(logger.handler, level, msg; kwargs...)
 
 """
     shouldlog(logger, level)
@@ -88,7 +88,7 @@ for (macroname, level) in [(:debug, Debug),
         quote
             logger = $logger
             if shouldlog(logger, $($level))
-                log_to_handler(logger, $($level), $msg;
+                handlelog(logger, $($level), $msg;
                     context=$context, id=gensym(), module_=$mod, location=(@__FILE__, $lineno),
                     $(kwargs...))
             end

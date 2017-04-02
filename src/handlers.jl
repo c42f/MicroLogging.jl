@@ -12,8 +12,8 @@ end
 
 LogHandler(stream::IO, interactive_style=isinteractive()) = LogHandler(stream, interactive_style, nothing)
 
-function logmsg(handler::LogHandler, level, msg; context=nothing,
-                location=("",0), progress=nothing, kwargs...)
+function handlelog(handler::LogHandler, level, msg; context=nothing,
+                   location=("",0), progress=nothing, kwargs...)
     filename = location[1] === nothing ? "REPL" : basename(location[1])
     if handler.interactive_style
         if     level <= Debug ; color = :cyan       ; bold = false; levelstr = "- DEBUG"

@@ -28,7 +28,7 @@ end
 
 TestHandler() = TestHandler(LogRecord[])
 
-function MicroLogging.logmsg(handler::TestHandler, level, msg; kwargs...)
+function MicroLogging.handlelog(handler::TestHandler, level, msg; kwargs...)
     push!(handler.records, LogRecord(level, msg, kwargs))
 end
 
