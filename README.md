@@ -68,39 +68,94 @@ close(logfile)
 
 ## MicroLogging implementation choices
 
+### Early filtering
+
+The filtering of log messages should cheap enough that users feel free to leave
+them available rather than commenting them out or otherwise disabling them at
+compile time. The only way to achieve this is to filter early, before the
+entire log message and other log record metadata is fully determined. Thus, we
+have the following design challenge:
+
+> Allow early filtering of log records *before* the record is fully constructed.
+
+In most logging libraries, a basic level of filtering is achieved based on an
+ordered **log level** which represents a verbosity/severity (debug, info,
+warning, error, etc).  Messages more verbose than the currently minimum level
+are filtered out.  This seems simple, effective and efficient as a first pass
+filter. Naturally, further filtering may also occur based on the log message or
+other log record metadata.
+
+*TODO*: can we generalize early filtering without loosing efficiency?
+
+
 ### Logging macros
 
-Efficiency seems to dictate that the main log filtering decision is done
-*before* any logging-specific user code is run. This implies either a logging
-macro to insert an early test and branch, or that the message formatting work
-is passed as a closure. We'd also like to gather information from lexical
-scope, and to look up/create a logger statically with the correct context.
+Efficiency seems to dictate that some filtering decision is done *before* any
+logging-specific user code is run. This implies either a logging macro to insert
+an early test and branch, or that the log record creation is passed as a
+closure. We'd also like to gather information from lexical scope, and to look
+up/create the logger for the current module at compile time.
 
-These considerations seem to indicate that a macro be used, which also has the
-nice side effect of being visually simple:
+These considerations indicate that a macro be used, which also has the nice side
+effect of being visually simple:
 
 ```julia
 x = 42
 @info "my value is x = $x"
 ```
 
-### Logging context, levels, and filtering
+To achieve early filtering, this example currently expands to something like
 
-The filtering of any given log message should be so cheap that users feel free
-to leave it available rather than commenting it out or otherwise disabling it at
-compile time.  In most logging libraries, simple filtering is achieved based on
-an ordered **log level** (or severity - debug,info,warning,error, etc) which is
-individually controllable per **logger context**.  Messages less severe than the
-currently minimum level for the context are filtered out.  This seems simple,
-effective and efficient as a first pass filter and there doesn't seem to be a
-strong reason to change it.
+```julia
+logger = $(get_logger(current_module()))
+if shouldlog(logger, MicroLogging.Info)
+    handlelog(logger, "my value is x = $x", #=...=#)
+end
+```
 
-The appropriate granularity for logger context can be debated, but the python
-community seems to have settled on using
+### Logging context
+
+Every log record has various types of context which can be associated with it.
+Some types of context include:
+
+* static **lexical context** - based on the location in the code - local
+    variables, line number, file, function, module.
+* dynamic **caller context** - the current stack trace, and data visible in
+    it. Consider, for example, the context which can be passed with the
+    femtolisp `with-bindings` construct.
+* dynamic **data context** - context created from data structures available at
+    log record creation.
+
+Log context can be used in two ways.  First, to dispatch the log record to
+appropriate handler *code*.  Second, to enrich the log record with *data* about
+the state of the program.
+
+> Where does a log message get sent after it is created?
+
+The python community seems to have settled on using
 [per-module contexts](https://docs.python.org/3/library/logging.html#logger-objects).
 `MicroLogging` follows this idea, but uses logging macros to set a per-module
-logger up automatically, and log to the current module logger from any unadorned
-log statement.
+logger up automatically, and logs to the current module logger from any
+unadorned log statement.
+
+In addition, general data context is supported as a way of finding a log
+handler.  For example, using the classic dependency injection approach:
+
+```julia
+type MyDataStructure
+    logger::Logger
+    #...
+end
+get_logger(ctx::MyDataStructure) = ctx.logger
+
+context = MyDataStructure(#=...=#)
+
+@info context "Message will be redirected to get_logger(context)"
+```
+
+> Which metadata is automatically included with the log record?
+
+*TODO*
 
 ### Configuration
 
