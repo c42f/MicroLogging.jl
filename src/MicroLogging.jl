@@ -9,32 +9,13 @@ export Logger,
 
 include("handlers.jl")
 
-
-#-------------------------------------------------------------------------------
-# TODO: Do we need user-defined log levels ?
-# abstract AbstractLogLevel
-
 """
-Predefined log levels, for fast log filtering
+Severity/verbosity of a log record.
+
+The log level provides a key against which log records may be filtered before
+any work is done formatting the log message and other metadata.
 """
-immutable LogLevel
-    level::Int
-end
-const Debug = LogLevel(0)
-const Info  = LogLevel(10)
-const Warn  = LogLevel(20)
-const Error = LogLevel(30)
-
-Base.:<=(l1::LogLevel, l2::LogLevel) = l1.level <= l2.level
-
-function Base.show(io::IO, level::LogLevel)
-    if     level == Debug ; print(io, "Debug")
-    elseif level == Info  ; print(io, "Info")
-    elseif level == Warn  ; print(io, "Warn")
-    elseif level == Error ; print(io, "Error")
-    else                    print(io, "LogLevel($level.level)")
-    end
-end
+@enum LogLevel Debug Info Warn Error
 
 
 #-------------------------------------------------------------------------------
