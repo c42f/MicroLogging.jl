@@ -1,7 +1,7 @@
 using MicroLogging
 using Base.Test
 
-import MicroLogging: Debug, Info, Warn, Error
+import MicroLogging: LogLevel, Debug, Info, Warn, Error
 
 if VERSION < v"0.6-"
     # Override Test.@test_broken, which is broken on julia-0.5!
@@ -11,34 +11,51 @@ if VERSION < v"0.6-"
     end
 end
 
+# Test helpers
 
 type LogRecord
-    context
     level
     message
     kwargs
 end
 
+LogRecord(level::LogLevel, message; kwargs...) = LogRecord(level, message, kwargs)
+
 type TestHandler
-    records
+    records::Vector{LogRecord}
 end
+
 
 TestHandler() = TestHandler(LogRecord[])
 
-function MicroLogging.logmsg(handler::TestHandler, context, level, msg; kwargs...)
-    push!(handler.records, LogRecord(context, level, msg, kwargs))
+function MicroLogging.logmsg(handler::TestHandler, level, msg; kwargs...)
+    push!(handler.records, LogRecord(level, msg, kwargs))
 end
 
-function records!(handler::TestHandler)
-    rs = handler.records
-    handler.records = LogRecord[]
-    rs
+getlog!(handler::TestHandler) = shift!(handler.records)
+
+Base.isempty(handler::TestHandler) = isempty(handler.records)
+
+
+function record_matches(r, ref::Tuple)
+    (r.level, r.message) == ref
 end
 
-function simple_records!(handler::TestHandler)
-    [(r.context, r.level, r.message) for r in records!(handler)]
+function record_matches(r, ref::LogRecord)
+    (r.level, r.message) == (ref.level, ref.message) || return false
+    rkw = Dict(r.kwargs)
+    for (k,v) in ref.kwargs
+        (haskey(rkw, k) && rkw[k] == v) || return false
+    end
+    return true
 end
 
+# Use superset operator for improved log message reporting in @test
+⊃(r::LogRecord, ref) = record_matches(r, ref)
+
+
+#-------------------------------------------------------------------------------
+#-------------------------------------------------------------------------------
 @testset "MicroLogging" begin
 
 #-------------------------------------------------------------------------------
@@ -51,42 +68,36 @@ end
     @info  "b"
     @warn  "c"
     @error "d"
-    @test simple_records!(handler) == [
-        (Main, Debug, "a"),
-        (Main, Info , "b"),
-        (Main, Warn , "c"),
-        (Main, Error, "d")
-    ]
+    @test getlog!(handler) ⊃ (Debug, "a")
+    @test getlog!(handler) ⊃ (Info , "b")
+    @test getlog!(handler) ⊃ (Warn , "c")
+    @test getlog!(handler) ⊃ (Error, "d")
 
     configure_logging(level=MicroLogging.Info)
     @debug "a"
     @info  "b"
     @warn  "c"
     @error "d"
-    @test simple_records!(handler) == [
-        (Main, Info , "b"),
-        (Main, Warn , "c"),
-        (Main, Error, "d")
-    ]
+    @test getlog!(handler) ⊃ (Info , "b")
+    @test getlog!(handler) ⊃ (Warn , "c")
+    @test getlog!(handler) ⊃ (Error, "d")
 
     configure_logging(level=MicroLogging.Warn)
     @debug "a"
     @info  "b"
     @warn  "c"
     @error "d"
-    @test simple_records!(handler) == [
-        (Main, Warn , "c"),
-        (Main, Error, "d")
-    ]
+    @test getlog!(handler) ⊃ (Warn , "c")
+    @test getlog!(handler) ⊃ (Error, "d")
 
     configure_logging(level=MicroLogging.Error)
     @debug "a"
     @info  "b"
     @warn  "c"
     @error "d"
-    @test simple_records!(handler) == [
-        (Main, Error, "d")
-    ]
+    @test getlog!(handler) ⊃ (Error, "d")
+
+    @test isempty(handler)
 end
 
 
@@ -95,25 +106,25 @@ end
 
 @testset "Log to custom logger" begin
     handler = TestHandler()
-    logger = Logger(:TestContext, MicroLogging.Debug, handler)
+    logger = Logger(MicroLogging.Debug, handler)
 
     @debug logger "a"
     @info  logger "b"
     @warn  logger "c"
     @error logger "d"
 
-    @test simple_records!(handler) == [
-        (:TestContext, Debug, "a"),
-        (:TestContext, Info , "b"),
-        (:TestContext, Warn , "c"),
-        (:TestContext, Error, "d")
-    ]
+    @test getlog!(handler) ⊃ (Debug, "a")
+    @test getlog!(handler) ⊃ (Info , "b")
+    @test getlog!(handler) ⊃ (Warn , "c")
+    @test getlog!(handler) ⊃ (Error, "d")
+
+    @test isempty(handler)
 end
 
 
 @testset "Log message formatting" begin
     handler = TestHandler()
-    logger = Logger(:TestContext, MicroLogging.Info, handler)
+    logger = Logger(MicroLogging.Info, handler)
 
     # Message may be formatted any way the user pleases
     @info logger begin
@@ -124,33 +135,55 @@ end
     @info logger "$i"
     @info logger @sprintf("%.3f", i)
 
-    @test simple_records!(handler) == [
-        (:TestContext, Info, "sum(A) = 16.0"),
-        (:TestContext, Info, "10.5"),
-        (:TestContext, Info, "10.500")
-    ]
+    @test getlog!(handler) ⊃ (Info, "sum(A) = 16.0")
+    @test getlog!(handler) ⊃ (Info, "10.5")
+    @test getlog!(handler) ⊃ (Info, "10.500")
+
+    @test isempty(handler)
 end
+
+@testset "Custom contexts - dependency injection" begin
+    @eval type ThingWithInjectedLogger
+        i::Int
+        logger
+    end
+    @eval MicroLogging.get_logger(thing::ThingWithInjectedLogger) = thing.logger
+
+    handler = TestHandler()
+    logger = Logger(MicroLogging.Info, handler)
+
+    thing = ThingWithInjectedLogger(42, logger)
+
+    @info thing "Test"
+
+    @test getlog!(handler) ⊃ LogRecord(Info, "Test", context=thing)
+
+    @test isempty(handler)
+end
+
+#-------------------------------------------------------------------------------
+# Log record structure
 
 @testset "Structured logging with key value pairs" begin
     handler = TestHandler()
-    logger = Logger(:TestContext, MicroLogging.Info, handler)
+    logger = Logger(MicroLogging.Info, handler)
 
     foo_val = 10
     expected_log_line = 1 + @__LINE__
     @info logger "test" progress=0.1 foo=foo_val
-    recs = records!(handler)
-
-    @test length(recs) == 1
-    kwargs = Dict(recs[1].kwargs)
+    kwargs = Dict(getlog!(handler).kwargs)
 
     # Builtin metadata
     @test kwargs[:location][1] == Base.source_path()
     @test_broken kwargs[:location][2] == expected_log_line # See #1
     @test kwargs[:module_] == Main
+    @test isa(kwargs[:id], Symbol)
 
     # User-defined metadata
     @test kwargs[:progress] == 0.1
     @test kwargs[:foo] == foo_val
+
+    @test isempty(handler)
 end
 
 
@@ -189,7 +222,6 @@ end
     end
 end
 
-
 @testset "Logger heirarchy" begin
     handler = TestHandler()
     B_handler = TestHandler()
@@ -201,25 +233,21 @@ end
     configure_logging(A.B.C, level=Error)
 
     A.a()
-    @test simple_records!(handler) == [
-        (A, Info , "a"),
-        (A, Warn , "a"),
-        (A, Error, "a")
-    ]
+    @test getlog!(handler) ⊃ LogRecord(Info , "a", context=A)
+    @test getlog!(handler) ⊃ LogRecord(Warn , "a", context=A)
+    @test getlog!(handler) ⊃ LogRecord(Error, "a", context=A)
 
     A.B.b()
-    @test isempty(records!(handler))
-    @test simple_records!(B_handler) == [
-        (A.B, Warn , "b"),
-        (A.B, Error, "b")
-    ]
+    @test isempty(handler)
+    @test getlog!(B_handler) ⊃ LogRecord(Warn , "b", context=A.B)
+    @test getlog!(B_handler) ⊃ LogRecord(Error, "b", context=A.B)
 
     A.B.C.c()
-    @test isempty(records!(handler))
-    @test simple_records!(B_handler) == [
-        (A.B.C, Error, "c")
-    ]
-end
+    @test isempty(handler)
+    @test getlog!(B_handler) ⊃ LogRecord(Error, "c", context=A.B.C)
 
+    @test isempty(handler)
+    @test isempty(B_handler)
+end
 
 end

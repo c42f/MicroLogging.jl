@@ -19,24 +19,21 @@ any work is done formatting the log message and other metadata.
 
 
 #-------------------------------------------------------------------------------
-# TODO: Decide whether to parameterize type on a MinLevel, for dead code elim
-# of custom verbose levels
 type Logger
-    context        # Indicator of context in which the log event happened; usually a julia module
     min_level::LogLevel
     handler
-    children::Vector{Any}
+    children::Vector
 end
 
-Logger(context, parent::Logger=get_logger(current_module())) =
-    Logger(context, parent.min_level, parent.handler, Vector{Any}())
+Logger(parent::Logger) =
+    Logger(parent.min_level, parent.handler, Vector{Any}())
 
-Logger(context, level, handler) = Logger(context, level, handler, Vector{Any}())
+Logger(level::LogLevel, handler) = Logger(level, handler, Vector{Any}())
 
 Base.push!(parent::Logger, child) = push!(parent.children, child)
 
 log_to_handler(logger::Logger, level, msg; kwargs...) =
-    logmsg(logger.handler, logger.context, level, msg; kwargs...)
+    logmsg(logger.handler, level, msg; kwargs...)
 
 """
     shouldlog(logger, level)
@@ -45,7 +42,11 @@ Determine whether messages of severity `level` should be sent to `logger`.
 """
 shouldlog(logger::Logger, level) = logger.min_level <= level
 
-function match_log_macro_exprs(exs, context, macroname)
+
+#-------------------------------------------------------------------------------
+# Logging macros
+
+function match_log_macro_exprs(exs, module_, macroname)
     # Match key,value pairs
     args = Any[]
     kwargs = Any[]
@@ -58,33 +59,37 @@ function match_log_macro_exprs(exs, context, macroname)
         end
     end
     if length(args) == 1
-        logger_ex = get_logger(context)
+        context = module_
+        # Optimization: for logging to the module logger, grab the logger at
+        # macro expansion time, to avoid the cost of looking it up in a
+        # dictionary for every log record.
+        logger = get_logger(module_)
         msg = esc(args[1])
     elseif length(args) == 2
-        logger_ex = esc(args[1])
+        context = esc(args[1])
+        logger = :(get_logger($context))
         msg = esc(args[2])
     else
         error("@$macroname must be called with one or two arguments")
     end
-    logger_ex, msg, kwargs
+    context, logger, msg, kwargs
 end
 
-# Logging macros
 for (macroname, level) in [(:debug, Debug),
                            (:info,  Info),
                            (:warn,  Warn),
                            (:error, Error)]
     @eval macro $macroname(exs...)
         mod = current_module()
-        logger_ex, msg, kwargs = match_log_macro_exprs(exs, mod, $(Expr(:quote, macroname)))
+        context, logger, msg, kwargs = match_log_macro_exprs(exs, mod, $(Expr(:quote, macroname)))
         # FIXME: The following dubious hack gives an approximate line number
         # only - the line of the start of the toplevel expression! See #1.
         lineno = Int(unsafe_load(cglobal(:jl_lineno, Cint)))
         quote
-            logger = $logger_ex
+            logger = $logger
             if shouldlog(logger, $($level))
                 log_to_handler(logger, $($level), $msg;
-                    id=gensym(), module_=$mod, location=(@__FILE__, $lineno),
+                    context=$context, id=gensym(), module_=$mod, location=(@__FILE__, $lineno),
                     $(kwargs...))
             end
             nothing
@@ -94,32 +99,33 @@ end
 
 
 #-------------------------------------------------------------------------------
-# All registered module loggers
+# Registry of module loggers
 const _registered_loggers = Dict{Module,Any}()
 
 function __init__()
-    _registered_loggers[Main] = Logger(Main, Info, LogHandler(STDERR))
+    _registered_loggers[Main] = Logger(Info, LogHandler(STDERR))
 end
 
 
 """
-    get_logger(module)
+    get_logger(context)
 
-Get the logger which will be used from within `module`, creating it and adding
-it to the logging heirarchy if it doesn't yet exist.  The logger heirarchy is
-taken from the module heirarchy.
+Get the logger which should be used to dispatch messages for `context`.
+
+When `context` is a module, the global logger instance for the module will be
+returned; if this doesn't yet exist, it will be created and added to a logger
+heirarchy with parent equal to `parent_module(context)`.
 """
-# TODO: Allow code contexts other than Module?
 function get_logger(mod::Module=Main)
     get!(_registered_loggers, mod) do
         parent = get_logger(module_parent(mod))
-        logger = Logger(mod, parent)
+        logger = Logger(parent)
         push!(parent, logger)
         logger
     end
 end
 
-# TODO: @set_logger MyLogger
+get_logger(context::Logger) = context
 
 #-------------------------------------------------------------------------------
 # Log system config
@@ -129,12 +135,9 @@ end
 Configure logging system
 """
 function configure_logging(logger; level=nothing, handler=nothing)
-    if level !== nothing
-        logger.min_level = level
-    end
-    if handler !== nothing
-        logger.handler = handler
-    end
+    level   === nothing || (logger.min_level = level;)
+    handler === nothing || (logger.handler = handler;)
+
     for child in logger.children
         configure_logging(child; level=level, handler=handler)
     end
