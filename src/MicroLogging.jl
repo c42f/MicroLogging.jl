@@ -1,3 +1,5 @@
+__precompile__()
+
 module MicroLogging
 
 export Logger,
@@ -112,9 +114,12 @@ end
 
 #-------------------------------------------------------------------------------
 # All registered module loggers
-const _registered_loggers = Dict{Module,Any}(
-    Main=>Logger(Main, Info, LogHandler(STDERR))
-)
+const _registered_loggers = Dict{Module,Any}()
+
+function __init__()
+    _registered_loggers[Main] = Logger(Main, Info, LogHandler(STDERR))
+end
+
 
 """
     get_logger(module)
