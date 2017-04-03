@@ -11,33 +11,21 @@ discussion see the Julep - https://github.com/JuliaLang/Juleps/pull/30/files
 ## Quickstart
 
 ```julia
+module LogTest
+using MicroLogging
+function f(x)
+    @debug "a LogTest module debug message $x"
+    @info  "a LogTest module info message $x"
+    @warn  "a LogTest module warning message $x"
+    @error "a LogTest module error message $x"
+end
+end
 
 using MicroLogging
 
+@info ".......... Simple logging .........."
 @info "Default level is info"
 @debug "I am an invisible debug message"
-
-
-module LogTest
-
-using MicroLogging
-
-function f(x)
-    @debug "enabled $x"
-    @info  "enabled $x"
-    @warn  "enabled $x"
-    @error "enabled $x"
-end
-
-end
-
-configure_logging(LogTest, level=MicroLogging.Warn)
-@info "Logging at Warn for LogTest module"
-LogTest.f(1)
-
-@info "Set all loggers to Debug level"
-configure_logging(level=MicroLogging.Debug)
-LogTest.f(2)
 
 @info """
 A big
@@ -48,21 +36,52 @@ multiline
 string
 """
 
-for i=1:10
+@info ".......... Per module logger config .........."
+
+configure_logging(LogTest, level=MicroLogging.Warn)
+@info "Logging at Warn for LogTest module"
+LogTest.f(1)
+
+@info "Set all loggers to Debug level"
+configure_logging(level=MicroLogging.Debug)
+LogTest.f(2)
+
+
+@info ".......... Log suppression with `once` and `max_log`: .........."
+for i=1:20
     if i > 7
-        @warn "i=$i out of bounds"
+        @error "i=$i out of bounds (set once=true)" once=true
+        @warn "i=$i out of bounds (set max_log=2)" max_log=2
         continue
     end
     @info "The value of (1+i) is $(1+i)"
 end
 
-@info "Redirect logging to a file"
+
+@info ".......... Simple progress logging .........."
+for i=1:100
+    sleep(0.01)
+    i%20 != 0 || @warn "foo"
+    @info "task1" progress=i/100
+end
+
+#@debug "Progress logging also at debug level"
+for i=1:100
+    sleep(0.01)
+    @debug "task2" progress=i/100
+end
+
+
+@info ".......... Redirect logging to a file .........."
 logfile = open("log.txt", "w")
 configure_logging(level=MicroLogging.Info,
                   handler=MicroLogging.LogHandler(logfile, false))
 @info "Logging redirected to a file"
 LogTest.f(3)
 close(logfile)
+
+configure_logging(handler=MicroLogging.LogHandler(STDOUT,true))
+@info "Now directed back to stderr"
 ```
 
 
