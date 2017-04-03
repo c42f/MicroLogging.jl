@@ -8,12 +8,28 @@ type LogHandler
     stream::IO
     interactive_style::Bool
     prev_progress_key
+    message_counts::Dict{Symbol,Int}
 end
 
-LogHandler(stream::IO, interactive_style=isinteractive()) = LogHandler(stream, interactive_style, nothing)
+function LogHandler(stream::IO, interactive_style=isinteractive())
+    LogHandler(stream, interactive_style, nothing, Dict{Symbol,Int}())
+end
 
 function handlelog(handler::LogHandler, level, msg; context=nothing,
-                   location=("",0), progress=nothing, kwargs...)
+                   id=nothing, once=false, max_log=-1, location=("",0), progress=nothing, kwargs...)
+    # Additional log filtering
+    if once || max_log >= 0
+        if once
+            max_log = 1
+        end
+        count = get!(handler.message_counts, id, 0)
+        count += 1
+        handler.message_counts[id] = count
+        if count > max_log
+            return
+        end
+    end
+    # Log printing
     filename = location[1] === nothing ? "REPL" : basename(location[1])
     if handler.interactive_style
         if     level <= Debug ; color = :cyan       ; bold = false; levelstr = "- DEBUG"
@@ -60,6 +76,5 @@ function handlelog(handler::LogHandler, level, msg; context=nothing,
         end
     end
 end
-
 
 

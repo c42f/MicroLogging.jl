@@ -85,11 +85,12 @@ for (macroname, level) in [(:debug, Debug),
         # FIXME: The following dubious hack gives an approximate line number
         # only - the line of the start of the toplevel expression! See #1.
         lineno = Int(unsafe_load(cglobal(:jl_lineno, Cint)))
+        id = Expr(:quote, gensym())
         quote
             logger = $logger
             if shouldlog(logger, $($level))
                 handlelog(logger, $($level), $msg;
-                    context=$context, id=gensym(), module_=$mod, location=(@__FILE__, $lineno),
+                    context=$context, id=$id, module_=$mod, location=(@__FILE__, $lineno),
                     $(kwargs...))
             end
             nothing
