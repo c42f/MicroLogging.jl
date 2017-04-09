@@ -69,3 +69,17 @@ close(logfile)
 
 configure_logging(handler=MicroLogging.LogHandler(STDOUT,true))
 @info "Now directed back to stderr"
+
+
+# Dynamic scoping for log config.
+#
+# * Log *dispatch* via dynamically scoped handler.
+#
+# * Log *metadata* should include the lexical context.
+#
+
+
+#task_local_storage(:LOGGER, 
+
+#with_logger(do_task)
+

@@ -4,6 +4,7 @@ module MicroLogging
 
 export Logger,
     @debug, @info, @warn, @error,
+    @debug2,
     get_logger, configure_logging
 
 
@@ -33,7 +34,7 @@ Logger(level::LogLevel, handler) = Logger(level, handler, Vector{Any}())
 Base.push!(parent::Logger, child) = push!(parent.children, child)
 
 handlelog(logger::Logger, level, msg; kwargs...) =
-    handlelog(logger.handler, level, msg; kwargs...)
+    handlelog(get_handler(logger), level, msg; kwargs...)
 
 """
     shouldlog(logger, level)
@@ -99,12 +100,45 @@ for (macroname, level) in [(:debug, Debug),
 end
 
 
+@inline function get_dyn_logger(default)
+    # Horrible hack - abuse Task.result to test speed of task storage access,
+    # without incurring dict lookup cost inherent from task_local_storage()
+#    if isa(current_task().result, Void)
+#        return default
+#    end
+#    current_task().result::Logger
+    tls = task_local_storage()
+    #haskey(tls,:LOGGER) || return default
+    tls[:LOGGER]::Logger
+end
+
+macro debug2(exs...)
+    mod = current_module()
+    context, logger, msg, kwargs = match_log_macro_exprs(exs, mod, :debug2)
+    # FIXME: The following dubious hack gives an approximate line number
+    # only - the line of the start of the toplevel expression! See #1.
+    lineno = Int(unsafe_load(cglobal(:jl_lineno, Cint)))
+    id = Expr(:quote, gensym())
+    quote
+        logger = get_dyn_logger($logger)
+        if shouldlog(logger, Debug)
+            handlelog(logger, Debug, $msg;
+                context=$context, id=$id, module_=$mod, location=(@__FILE__, $lineno),
+                $(kwargs...))
+        end
+        nothing
+    end
+end
+
+
 #-------------------------------------------------------------------------------
 # Registry of module loggers
 const _registered_loggers = Dict{Module,Any}()
+_global_handler = nothing
 
 function __init__()
     _registered_loggers[Main] = Logger(Info, LogHandler(STDERR))
+    global _global_handler = LogHandler(STDERR)
 end
 
 
@@ -127,6 +161,13 @@ function get_logger(mod::Module=Main)
 end
 
 get_logger(context::Logger) = context
+
+
+@inline function get_handler(logger::Logger)
+    tls = task_local_storage()
+    haskey(tls,:LOG_HANDLER) || return _global_handler
+    tls[:LOG_HANDLER]
+end
 
 #-------------------------------------------------------------------------------
 # Log system config
