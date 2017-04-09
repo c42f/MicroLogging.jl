@@ -4,8 +4,7 @@ module MicroLogging
 
 export Logger,
     @debug, @info, @warn, @error,
-    @debug2,
-    get_logger, configure_logging
+    with_logger, get_logger, configure_logging
 
 
 include("handlers.jl")
@@ -22,19 +21,15 @@ any work is done formatting the log message and other metadata.
 #-------------------------------------------------------------------------------
 type Logger
     min_level::LogLevel
-    handler
     children::Vector
 end
 
 Logger(parent::Logger) =
-    Logger(parent.min_level, parent.handler, Vector{Any}())
+    Logger(parent.min_level, Vector{Any}())
 
-Logger(level::LogLevel, handler) = Logger(level, handler, Vector{Any}())
+Logger(level::LogLevel) = Logger(level, Vector{Any}())
 
 Base.push!(parent::Logger, child) = push!(parent.children, child)
-
-handlelog(logger::Logger, level, msg; kwargs...) =
-    handlelog(get_handler(logger), level, msg; kwargs...)
 
 """
     shouldlog(logger, level)
@@ -60,20 +55,12 @@ function match_log_macro_exprs(exs, module_, macroname)
         end
     end
     if length(args) == 1
-        context = module_
-        # Optimization: for logging to the module logger, grab the logger at
-        # macro expansion time, to avoid the cost of looking it up in a
-        # dictionary for every log record.
         logger = get_logger(module_)
         msg = esc(args[1])
-    elseif length(args) == 2
-        context = esc(args[1])
-        logger = :(get_logger($context))
-        msg = esc(args[2])
     else
-        error("@$macroname must be called with one or two arguments")
+        error("@$macroname must be called with one positional argument (the log message)")
     end
-    context, logger, msg, kwargs
+    logger, msg, kwargs
 end
 
 for (macroname, level) in [(:debug, Debug),
@@ -82,7 +69,7 @@ for (macroname, level) in [(:debug, Debug),
                            (:error, Error)]
     @eval macro $macroname(exs...)
         mod = current_module()
-        context, logger, msg, kwargs = match_log_macro_exprs(exs, mod, $(Expr(:quote, macroname)))
+        logger, msg, kwargs = match_log_macro_exprs(exs, mod, $(Expr(:quote, macroname)))
         # FIXME: The following dubious hack gives an approximate line number
         # only - the line of the start of the toplevel expression! See #1.
         lineno = Int(unsafe_load(cglobal(:jl_lineno, Cint)))
@@ -90,43 +77,12 @@ for (macroname, level) in [(:debug, Debug),
         quote
             logger = $logger
             if shouldlog(logger, $($level))
-                handlelog(logger, $($level), $msg;
-                    context=$context, id=$id, module_=$mod, location=(@__FILE__, $lineno),
+                handlelog(log_handler(), $($level), $msg;
+                    id=$id, module_=$mod, location=(@__FILE__, $lineno),
                     $(kwargs...))
             end
             nothing
         end
-    end
-end
-
-
-@inline function get_dyn_logger(default)
-    # Horrible hack - abuse Task.result to test speed of task storage access,
-    # without incurring dict lookup cost inherent from task_local_storage()
-#    if isa(current_task().result, Void)
-#        return default
-#    end
-#    current_task().result::Logger
-    tls = task_local_storage()
-    #haskey(tls,:LOGGER) || return default
-    tls[:LOGGER]::Logger
-end
-
-macro debug2(exs...)
-    mod = current_module()
-    context, logger, msg, kwargs = match_log_macro_exprs(exs, mod, :debug2)
-    # FIXME: The following dubious hack gives an approximate line number
-    # only - the line of the start of the toplevel expression! See #1.
-    lineno = Int(unsafe_load(cglobal(:jl_lineno, Cint)))
-    id = Expr(:quote, gensym())
-    quote
-        logger = get_dyn_logger($logger)
-        if shouldlog(logger, Debug)
-            handlelog(logger, Debug, $msg;
-                context=$context, id=$id, module_=$mod, location=(@__FILE__, $lineno),
-                $(kwargs...))
-        end
-        nothing
     end
 end
 
@@ -137,7 +93,7 @@ const _registered_loggers = Dict{Module,Any}()
 _global_handler = nothing
 
 function __init__()
-    _registered_loggers[Main] = Logger(Info, LogHandler(STDERR))
+    _registered_loggers[Main] = Logger(Info)
     global _global_handler = LogHandler(STDERR)
 end
 
@@ -162,30 +118,25 @@ end
 
 get_logger(context::Logger) = context
 
-
-@inline function get_handler(logger::Logger)
-    tls = task_local_storage()
-    haskey(tls,:LOG_HANDLER) || return _global_handler
-    tls[:LOG_HANDLER]
-end
-
 #-------------------------------------------------------------------------------
 # Log system config
 """
-    configure_logging([module|logger]; level=l, handler=h)
+    configure_logging([module|logger]; level=l)
 
 Configure logging system
 """
-function configure_logging(logger; level=nothing, handler=nothing)
+function configure_logging(logger; level=nothing)
     level   === nothing || (logger.min_level = level;)
-    handler === nothing || (logger.handler = handler;)
 
     for child in logger.children
-        configure_logging(child; level=level, handler=handler)
+        configure_logging(child; level=level)
     end
 end
 
 configure_logging(mod::Module=Main; kwargs...) = configure_logging(get_logger(mod); kwargs...)
+
+with_logger(f::Function, loghandler) = task_local_storage(f, :LOG_HANDLER, loghandler)
+log_handler() = get(task_local_storage(), :LOG_HANDLER, _global_handler)
 
 
 end

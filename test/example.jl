@@ -61,13 +61,12 @@ end
 
 @info ".......... Redirect logging to a file .........."
 logfile = open("log.txt", "w")
-configure_logging(level=MicroLogging.Info,
-                  handler=MicroLogging.LogHandler(logfile, false))
-@info "Logging redirected to a file"
-LogTest.f(3)
+with_logger(MicroLogging.LogHandler(logfile, false)) do
+    @info "Logging redirected to a file"
+    LogTest.f(3)
+end
 close(logfile)
 
-configure_logging(handler=MicroLogging.LogHandler(STDOUT,true))
 @info "Now directed back to stderr"
 
 

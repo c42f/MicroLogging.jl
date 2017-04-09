@@ -32,6 +32,12 @@ function MicroLogging.handlelog(handler::TestHandler, level, msg; kwargs...)
     push!(handler.records, LogRecord(level, msg, kwargs))
 end
 
+function collect_logs(f::Function)
+    handler = TestHandler()
+    with_logger(f, handler)
+    handler.records
+end
+
 getlog!(handler::TestHandler) = shift!(handler.records)
 
 Base.isempty(handler::TestHandler) = isempty(handler.records)
@@ -60,130 +66,98 @@ end
 
 #-------------------------------------------------------------------------------
 @testset "Basic logging" begin
-    handler = TestHandler()
-    configure_logging(handler=handler)
-
     configure_logging(level=Debug)
-    @debug "a"
-    @info  "b"
-    @warn  "c"
-    @error "d"
-    @test getlog!(handler) ⊃ (Debug, "a")
-    @test getlog!(handler) ⊃ (Info , "b")
-    @test getlog!(handler) ⊃ (Warn , "c")
-    @test getlog!(handler) ⊃ (Error, "d")
+    logs = collect_logs() do
+        @debug "a"
+        @info  "b"
+        @warn  "c"
+        @error "d"
+    end
+    @test logs[1] ⊃ (Debug, "a")
+    @test logs[2] ⊃ (Info , "b")
+    @test logs[3] ⊃ (Warn , "c")
+    @test logs[4] ⊃ (Error, "d")
+    @test length(logs) == 4
 
     configure_logging(level=MicroLogging.Info)
-    @debug "a"
-    @info  "b"
-    @warn  "c"
-    @error "d"
-    @test getlog!(handler) ⊃ (Info , "b")
-    @test getlog!(handler) ⊃ (Warn , "c")
-    @test getlog!(handler) ⊃ (Error, "d")
+    logs = collect_logs() do
+        @debug "a"
+        @info  "b"
+        @warn  "c"
+        @error "d"
+    end
+    @test logs[1] ⊃ (Info , "b")
+    @test logs[2] ⊃ (Warn , "c")
+    @test logs[3] ⊃ (Error, "d")
+    @test length(logs) == 3
 
     configure_logging(level=MicroLogging.Warn)
-    @debug "a"
-    @info  "b"
-    @warn  "c"
-    @error "d"
-    @test getlog!(handler) ⊃ (Warn , "c")
-    @test getlog!(handler) ⊃ (Error, "d")
+    logs = collect_logs() do
+        @debug "a"
+        @info  "b"
+        @warn  "c"
+        @error "d"
+    end
+    @test logs[1] ⊃ (Warn , "c")
+    @test logs[2] ⊃ (Error, "d")
+    @test length(logs) == 2
 
     configure_logging(level=MicroLogging.Error)
-    @debug "a"
-    @info  "b"
-    @warn  "c"
-    @error "d"
-    @test getlog!(handler) ⊃ (Error, "d")
-
-    @test isempty(handler)
+    logs = collect_logs() do
+        @debug "a"
+        @info  "b"
+        @warn  "c"
+        @error "d"
+    end
+    @test logs[1] ⊃ (Error, "d")
+    @test length(logs) == 1
 end
 
 
 #-------------------------------------------------------------------------------
 # Macro front end
 
-@testset "Log to custom logger" begin
-    handler = TestHandler()
-    logger = Logger(MicroLogging.Debug, handler)
-
-    @debug logger "a"
-    @info  logger "b"
-    @warn  logger "c"
-    @error logger "d"
-
-    @test getlog!(handler) ⊃ (Debug, "a")
-    @test getlog!(handler) ⊃ (Info , "b")
-    @test getlog!(handler) ⊃ (Warn , "c")
-    @test getlog!(handler) ⊃ (Error, "d")
-
-    @test isempty(handler)
-end
-
-
 @testset "Log message formatting" begin
-    handler = TestHandler()
-    logger = Logger(MicroLogging.Info, handler)
-
-    # Message may be formatted any way the user pleases
-    @info logger begin
-        A = ones(4,4)
-        "sum(A) = $(sum(A))"
+    configure_logging(level=MicroLogging.Info)
+    logs = collect_logs() do
+        # Message may be formatted any way the user pleases
+        @info begin
+            A = ones(4,4)
+            "sum(A) = $(sum(A))"
+        end
+        i = 10.50
+        @info "$i"
+        @info @sprintf("%.3f", i)
     end
-    i = 10.50
-    @info logger "$i"
-    @info logger @sprintf("%.3f", i)
 
-    @test getlog!(handler) ⊃ (Info, "sum(A) = 16.0")
-    @test getlog!(handler) ⊃ (Info, "10.5")
-    @test getlog!(handler) ⊃ (Info, "10.500")
-
-    @test isempty(handler)
-end
-
-@testset "Custom contexts - dependency injection" begin
-    @eval type ThingWithInjectedLogger
-        i::Int
-        logger
-    end
-    @eval MicroLogging.get_logger(thing::ThingWithInjectedLogger) = thing.logger
-
-    handler = TestHandler()
-    logger = Logger(MicroLogging.Info, handler)
-
-    thing = ThingWithInjectedLogger(42, logger)
-
-    @info thing "Test"
-
-    @test getlog!(handler) ⊃ LogRecord(Info, "Test", context=thing)
-
-    @test isempty(handler)
+    @test logs[1] ⊃ (Info, "sum(A) = 16.0")
+    @test logs[2] ⊃ (Info, "10.5")
+    @test logs[3] ⊃ (Info, "10.500")
+    @test length(logs) == 3
 end
 
 #-------------------------------------------------------------------------------
 # Log record structure
 
 @testset "Structured logging with key value pairs" begin
-    handler = TestHandler()
-    logger = Logger(MicroLogging.Info, handler)
-
+    configure_logging(level=MicroLogging.Info)
     foo_val = 10
-    expected_log_line = 1 + @__LINE__
-    @info logger "test" progress=0.1 foo=foo_val
-    kwargs = Dict(getlog!(handler).kwargs)
+    logs = collect_logs() do
+        @info "test" progress=0.1 foo=foo_val real_line=(@__LINE__)
+    end
+    @test length(logs) == 1
+
+    kwargs = Dict(logs[1].kwargs)
 
     # Builtin metadata
     @test kwargs[:location][1] == Base.source_path()
-    @test_broken kwargs[:location][2] == expected_log_line # See #1
+    @test_broken kwargs[:location][2] == kwargs[:real_line] # See #1
     @test kwargs[:module_] == Main
     @test isa(kwargs[:id], Symbol)
 
     # User-defined metadata
     @test kwargs[:progress] == 0.1
     @test kwargs[:foo] == foo_val
-
-    @test isempty(handler)
 end
 
 
@@ -223,31 +197,25 @@ end
 end
 
 @testset "Logger heirarchy" begin
-    handler = TestHandler()
-    B_handler = TestHandler()
-    # Install root handler
-    configure_logging(handler=handler)
     configure_logging(A, level=Info)
     # Override root handler for module B and its children
-    configure_logging(A.B, level=Warn, handler=B_handler)
+    configure_logging(A.B, level=Warn)
     configure_logging(A.B.C, level=Error)
 
-    A.a()
-    @test getlog!(handler) ⊃ LogRecord(Info , "a", context=A)
-    @test getlog!(handler) ⊃ LogRecord(Warn , "a", context=A)
-    @test getlog!(handler) ⊃ LogRecord(Error, "a", context=A)
+    logs = collect_logs() do
+        A.a()
+        A.B.b()
+        A.B.C.c()
+    end
 
-    A.B.b()
-    @test isempty(handler)
-    @test getlog!(B_handler) ⊃ LogRecord(Warn , "b", context=A.B)
-    @test getlog!(B_handler) ⊃ LogRecord(Error, "b", context=A.B)
+    @test logs[1] ⊃ LogRecord(Info , "a", module_=A)
+    @test logs[2] ⊃ LogRecord(Warn , "a", module_=A)
+    @test logs[3] ⊃ LogRecord(Error, "a", module_=A)
 
-    A.B.C.c()
-    @test isempty(handler)
-    @test getlog!(B_handler) ⊃ LogRecord(Error, "c", context=A.B.C)
+    @test logs[4] ⊃ LogRecord(Warn , "b", module_=A.B)
+    @test logs[5] ⊃ LogRecord(Error, "b", module_=A.B)
 
-    @test isempty(handler)
-    @test isempty(B_handler)
+    @test logs[6] ⊃ LogRecord(Error, "c", module_=A.B.C)
 end
 
 end
