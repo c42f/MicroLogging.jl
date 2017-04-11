@@ -116,8 +116,6 @@ function get_logger(mod::Module=Main)
     end
 end
 
-get_logger(context::Logger) = context
-
 #-------------------------------------------------------------------------------
 # Log system config
 """
