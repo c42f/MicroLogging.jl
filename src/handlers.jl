@@ -15,6 +15,13 @@ function LogHandler(stream::IO, interactive_style=isinteractive())
     LogHandler(stream, interactive_style, nothing, Dict{Symbol,Int}())
 end
 
+function levelstyle(level::LogLevel)
+    level == Debug && return (:cyan,   false, "- DEBUG")
+    level == Info  && return (:blue,   false, "-- INFO")
+    level == Warn  && return (:yellow, true , "-- WARN")
+    level == Error && return (:red,    true , "- ERROR")
+end
+
 function handlelog(handler::LogHandler, level, msg; context=nothing,
                    id=nothing, once=false, max_log=-1, location=("",0), progress=nothing, kwargs...)
     # Additional log filtering
@@ -32,12 +39,7 @@ function handlelog(handler::LogHandler, level, msg; context=nothing,
     # Log printing
     filename = location[1] === nothing ? "REPL" : basename(location[1])
     if handler.interactive_style
-        if     level <= Debug ; color = :cyan       ; bold = false; levelstr = "- DEBUG"
-        elseif level <= Info  ; color = :blue       ; bold = false; levelstr = "-- INFO"
-        elseif level <= Warn  ; color = :yellow     ; bold = true ; levelstr = "-- WARN"
-        elseif level <= Error ; color = :red        ; bold = true ; levelstr = "- ERROR"
-        else                    color = :dark_white ; bold = false; levelstr = "- $level"
-        end
+        color, bold, levelstr = levelstyle(level)
         # Attempt at avoiding the problem of distracting metadata in info log
         # messages - print metadata to the right hand side.
         metastr = "[$(context):$(filename):$(location[2])] $levelstr"

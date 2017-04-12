@@ -3,11 +3,9 @@ __precompile__()
 module MicroLogging
 
 export Logger,
-    @debug, @info, @warn, @error,
+    @debug, @info, @warn, @error, @logmsg,
     with_logger, get_logger, configure_logging
 
-
-include("handlers.jl")
 
 """
 Severity/verbosity of a log record.
@@ -16,6 +14,9 @@ The log level provides a key against which log records may be filtered before
 any work is done formatting the log message and other metadata.
 """
 @enum LogLevel Debug Info Warn Error
+
+
+include("handlers.jl")
 
 
 #-------------------------------------------------------------------------------
@@ -42,49 +43,37 @@ shouldlog(logger::Logger, level) = logger.min_level <= level
 #-------------------------------------------------------------------------------
 # Logging macros
 
-function match_log_macro_exprs(exs, module_, macroname)
-    # Match key,value pairs
-    args = Any[]
+macro logmsg(level, message, exs...)
+    level = esc(level)
+    message = esc(message)
     kwargs = Any[]
     for ex in exs
-        if isa(ex,Expr) && ex.head == :(=)
-            isa(ex.args[1], Symbol) || throw(ArgumentError("Expected key value pair, got $ex"))
-            push!(kwargs, Expr(:kw, ex.args[1], esc(ex.args[2])))
-        else
-            push!(args, ex)
+        if !isa(ex,Expr) || ex.head != :(=) || !isa(ex.args[1], Symbol)
+            throw(ArgumentError("Expected key value pair, got $ex"))
         end
+        push!(kwargs, Expr(:kw, ex.args[1], esc(ex.args[2])))
     end
-    if length(args) == 1
-        logger = get_logger(module_)
-        msg = esc(args[1])
-    else
-        error("@$macroname must be called with one positional argument (the log message)")
+    module_ = current_module()
+    logger = get_logger(module_)
+    # FIXME: The following dubious hack gives an approximate line number
+    # only - the line of the start of the toplevel expression! See #1.
+    lineno = Int(unsafe_load(cglobal(:jl_lineno, Cint)))
+    id = Expr(:quote, gensym())
+    quote
+        logger = $logger
+        if shouldlog(logger, $level)
+            handlelog(log_handler(), $level, $message;
+                id=$id, module_=$module_, location=(@__FILE__, $lineno),
+                $(kwargs...))
+        end
+        nothing
     end
-    logger, msg, kwargs
 end
 
-for (macroname, level) in [(:debug, Debug),
-                           (:info,  Info),
-                           (:warn,  Warn),
-                           (:error, Error)]
-    @eval macro $macroname(exs...)
-        mod = current_module()
-        logger, msg, kwargs = match_log_macro_exprs(exs, mod, $(Expr(:quote, macroname)))
-        # FIXME: The following dubious hack gives an approximate line number
-        # only - the line of the start of the toplevel expression! See #1.
-        lineno = Int(unsafe_load(cglobal(:jl_lineno, Cint)))
-        id = Expr(:quote, gensym())
-        quote
-            logger = $logger
-            if shouldlog(logger, $($level))
-                handlelog(log_handler(), $($level), $msg;
-                    id=$id, module_=$mod, location=(@__FILE__, $lineno),
-                    $(kwargs...))
-            end
-            nothing
-        end
-    end
-end
+macro debug(message, exs...)  :(@logmsg Debug $(esc(message)) $(map(esc, exs)...))  end
+macro  info(message, exs...)  :(@logmsg Info  $(esc(message)) $(map(esc, exs)...))  end
+macro  warn(message, exs...)  :(@logmsg Warn  $(esc(message)) $(map(esc, exs)...))  end
+macro error(message, exs...)  :(@logmsg Error $(esc(message)) $(map(esc, exs)...))  end
 
 
 #-------------------------------------------------------------------------------
