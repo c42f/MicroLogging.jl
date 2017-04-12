@@ -25,12 +25,12 @@ string
 
 @info ".......... Per module logger config .........."
 
-configure_logging(LogTest, level=MicroLogging.Warn)
+limit_logging(LogTest, MicroLogging.Warn)
 @info "Logging at Warn for LogTest module"
 LogTest.f(1)
 
 @info "Set all loggers to Debug level"
-configure_logging(level=MicroLogging.Debug)
+limit_logging(MicroLogging.Debug)
 LogTest.f(2)
 
 
@@ -69,16 +69,4 @@ close(logfile)
 
 @info "Now directed back to stderr"
 
-
-# Dynamic scoping for log config.
-#
-# * Log *dispatch* via dynamically scoped handler.
-#
-# * Log *metadata* should include the lexical context.
-#
-
-
-#task_local_storage(:LOGGER, 
-
-#with_logger(do_task)
 

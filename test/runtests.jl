@@ -66,7 +66,7 @@ end
 
 #-------------------------------------------------------------------------------
 @testset "Basic logging" begin
-    configure_logging(level=Debug)
+    limit_logging(Debug)
     logs = collect_logs() do
         @debug "a"
         @info  "b"
@@ -79,7 +79,7 @@ end
     @test logs[4] ⊃ (Error, "d")
     @test length(logs) == 4
 
-    configure_logging(level=MicroLogging.Info)
+    limit_logging(Info)
     logs = collect_logs() do
         @debug "a"
         @info  "b"
@@ -91,7 +91,7 @@ end
     @test logs[3] ⊃ (Error, "d")
     @test length(logs) == 3
 
-    configure_logging(level=MicroLogging.Warn)
+    limit_logging(Warn)
     logs = collect_logs() do
         @debug "a"
         @info  "b"
@@ -102,7 +102,7 @@ end
     @test logs[2] ⊃ (Error, "d")
     @test length(logs) == 2
 
-    configure_logging(level=MicroLogging.Error)
+    limit_logging(Error)
     logs = collect_logs() do
         @debug "a"
         @info  "b"
@@ -118,7 +118,7 @@ end
 # Macro front end
 
 @testset "Log message formatting" begin
-    configure_logging(level=MicroLogging.Info)
+    limit_logging(Info)
     logs = collect_logs() do
         # Message may be formatted any way the user pleases
         @info begin
@@ -140,7 +140,7 @@ end
 # Log record structure
 
 @testset "Structured logging with key value pairs" begin
-    configure_logging(level=MicroLogging.Info)
+    limit_logging(Info)
     foo_val = 10
     logs = collect_logs() do
         @info "test" progress=0.1 foo=foo_val real_line=(@__LINE__)
@@ -197,10 +197,10 @@ end
 end
 
 @testset "Logger heirarchy" begin
-    configure_logging(A, level=Info)
+    limit_logging(A, Info)
     # Override root handler for module B and its children
-    configure_logging(A.B, level=Warn)
-    configure_logging(A.B.C, level=Error)
+    limit_logging(A.B, Warn)
+    limit_logging(A.B.C, Error)
 
     logs = collect_logs() do
         A.a()

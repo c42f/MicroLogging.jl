@@ -4,7 +4,7 @@ module MicroLogging
 
 export Logger,
     @debug, @info, @warn, @error, @logmsg,
-    with_logger, get_logger, configure_logging
+    with_logger, get_logger, limit_logging
 
 
 """
@@ -108,19 +108,19 @@ end
 #-------------------------------------------------------------------------------
 # Log system config
 """
-    configure_logging([module|logger]; level=l)
+    limit_logging(module, level)
 
-Configure logging system
+Limit logging to levels greater than or equal to `level`.
 """
-function configure_logging(logger; level=nothing)
-    level   === nothing || (logger.min_level = level;)
-
+function limit_logging(logger::Logger, level)
+    logger.min_level = level
     for child in logger.children
-        configure_logging(child; level=level)
+        limit_logging(child, level)
     end
 end
 
-configure_logging(mod::Module=Main; kwargs...) = configure_logging(get_logger(mod); kwargs...)
+limit_logging(level) = limit_logging(Main, level)
+limit_logging(mod::Module, level) = limit_logging(get_logger(mod), level)
 
 with_logger(f::Function, loghandler) = task_local_storage(f, :LOG_HANDLER, loghandler)
 log_handler() = get(task_local_storage(), :LOG_HANDLER, _global_handler)
