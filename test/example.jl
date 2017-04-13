@@ -23,7 +23,7 @@ multiline
 string
 """
 
-@info ".......... Per module logger config .........."
+@info ".......... Early filtering of logs per module, for efficiency .........."
 
 limit_logging(LogTest, MicroLogging.Warn)
 @info "Logging at Warn for LogTest module"
@@ -49,13 +49,13 @@ end
 for i=1:100
     sleep(0.01)
     i%20 != 0 || @warn "foo"
-    @info "task1" progress=i/100
+    @info "algorithm1" progress=i/100
 end
 
-#@debug "Progress logging also at debug level"
+@debug "Progress logging also at debug (or any) log level"
 for i=1:100
     sleep(0.01)
-    @debug "task2" progress=i/100
+    @debug "algorithm2" progress=i/100
 end
 
 
@@ -68,5 +68,3 @@ end
 close(logfile)
 
 @info "Now directed back to stderr"
-
-

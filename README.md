@@ -36,14 +36,14 @@ multiline
 string
 """
 
-@info ".......... Per module logger config .........."
+@info ".......... Early filtering of logs per module, for efficiency .........."
 
-configure_logging(LogTest, level=MicroLogging.Warn)
+limit_logging(LogTest, MicroLogging.Warn)
 @info "Logging at Warn for LogTest module"
 LogTest.f(1)
 
 @info "Set all loggers to Debug level"
-configure_logging(level=MicroLogging.Debug)
+limit_logging(MicroLogging.Debug)
 LogTest.f(2)
 
 
@@ -62,25 +62,24 @@ end
 for i=1:100
     sleep(0.01)
     i%20 != 0 || @warn "foo"
-    @info "task1" progress=i/100
+    @info "algorithm1" progress=i/100
 end
 
-#@debug "Progress logging also at debug level"
+@debug "Progress logging also at debug (or any) log level"
 for i=1:100
     sleep(0.01)
-    @debug "task2" progress=i/100
+    @debug "algorithm2" progress=i/100
 end
 
 
 @info ".......... Redirect logging to a file .........."
 logfile = open("log.txt", "w")
-configure_logging(level=MicroLogging.Info,
-                  handler=MicroLogging.LogHandler(logfile, false))
-@info "Logging redirected to a file"
-LogTest.f(3)
+with_logger(MicroLogging.LogHandler(logfile, false)) do
+    @info "Logging redirected to a file"
+    LogTest.f(3)
+end
 close(logfile)
 
-configure_logging(handler=MicroLogging.LogHandler(STDOUT,true))
 @info "Now directed back to stderr"
 ```
 
@@ -104,8 +103,15 @@ are filtered out.  This seems simple, effective and efficient as a first pass
 filter. Naturally, further filtering may also occur based on the log message or
 other log record metadata.
 
-*TODO*: can we generalize early filtering without loosing efficiency?
+*TODO*: can we generalize early filtering (eg, allow package-defined log
+levels) without loosing efficiency?
 
+In `MicroLogging`, early filtering can be controlled on a per-module basis
+using the `limit_logging` function:
+
+```julia
+limit_logging(MyModule, MicroLogging.Info)
+```
 
 ### Logging macros
 
@@ -126,13 +132,13 @@ x = 42
 To achieve early filtering, this example currently expands to something like
 
 ```julia
-logger = $(get_logger(current_module()))
-if shouldlog(logger, MicroLogging.Info)
-    handlelog(logger, "my value is x = $x", #=...=#)
+mod_log_ctx = $(get_logger(current_module()))
+if shouldlog(mod_log_ctx, MicroLogging.Info)
+    handlelog(log_handler(), "my value is x = $x", #=...=#)
 end
 ```
 
-### Logging context
+### Logging context and dispatch
 
 Every log record has various types of context which can be associated with it.
 Some types of context include:
@@ -149,43 +155,47 @@ Log context can be used in two ways.  First, to dispatch the log record to
 appropriate handler *code*.  Second, to enrich the log record with *data* about
 the state of the program.
 
-> Where does a log message get sent after it is created?
+> Which code processes a log message after it is created?
 
-The python community seems to have settled on using
-[per-module contexts](https://docs.python.org/3/library/logging.html#logger-objects).
-`MicroLogging` follows this idea, but uses logging macros to set a per-module
-logger up automatically, and logs to the current module logger from any
-unadorned log statement.
+Here we've got to choose between lexical vs dynamic scope to look up the log
+handler code.  MicroLogging chooses a *dynamically scoped* log handler bound to
+the current task.  To understand why this is a good choice, consider the two
+audiences of a logging library:
 
-In addition, general data context is supported as a way of finding a log
-handler.  For example, using the classic dependency injection approach:
+* *Package authors* want to emit logs in a simple way, without caring about how
+  they're dispatched.
+* *System programmers* must care about the system as built up from many
+  packages. They need to control how logs are dispatched, but don't care about
+  how they're emitted.
+
+System programmers tend to be calling functions from many different packages to
+achieve an overall task. With dynamic scoping for log handlers, it's trival for
+these programmers to control log dispatch per call stack (that is, per
+task/thread):
 
 ```julia
-type MyDataStructure
-    logger::Logger
-    #...
+handler = MyLogHandler(#= ... =#)
+
+with_logger(handler) do
+    Package1.foo()
+    Package2.bar()
+    Package2.baz()
 end
-get_logger(ctx::MyDataStructure) = ctx.logger
-
-context = MyDataStructure(#=...=#)
-
-@info context "Message will be redirected to get_logger(context)"
 ```
+
+Notably, this approach works no matter how deeply nested the call tree becomes
+within the various functions called by `Package1.foo()`, without any thought by
+the author of any of the packages in use.
+
+Most logging libraries seem to look up the log handler in lexical scope, which
+implies a global entry point for log dispatch.  For example, the python
+community seems to have settled on using
+[per-module contexts](https://docs.python.org/3/library/logging.html#logger-objects)
+to dispatch log messages (TODO: double check how this works).
 
 > Which metadata is automatically included with the log record?
 
 *TODO*
-
-### Configuration
-
-For simple catchall configuration to work, we need some kind of registry of
-logger instances for all logging contexts. A standard way to manage and
-configure the set of loggers is to arrange them in a hierarchy - here we mirror
-the module hierarchy by default.
-
-```julia
-configure_logging(handler=MyLogHandler())
-```
 
 ### Efficiency - messages you never see should cost almost nothing
 
@@ -198,5 +208,5 @@ The following should be fast
 end
 ```
 
-... FIXME more to write here
+... *FIXME* more to write here
 
