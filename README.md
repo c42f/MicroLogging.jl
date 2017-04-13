@@ -86,8 +86,15 @@ Contents of redirected IO stream buffer:
 $(takebuf_string(logstream))
 ................................
 """
-
 ```
+
+The script above produces console output like the following.  Note the
+unconventional choice of metadata placement.  In interactive mode,
+`MicroLogging` tries to put this out of your way as much as possible, by
+placing it on the right hand of the terminal.  The premise here is that you
+want to see your log message, not some metadata.
+
+![Micrologging example screenshot](doc/micrologging_example.png)
 
 
 ## MicroLogging implementation choices
