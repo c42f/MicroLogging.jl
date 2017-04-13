@@ -125,15 +125,29 @@ end
             A = ones(4,4)
             "sum(A) = $(sum(A))"
         end
-        i = 10.50
-        @info "$i"
-        @info @sprintf("%.3f", i)
+        x = 10.50
+        @info "$x"
+        @info @sprintf("%.3f", x)
     end
 
     @test logs[1] ⊃ (Info, "sum(A) = 16.0")
     @test logs[2] ⊃ (Info, "10.5")
     @test logs[3] ⊃ (Info, "10.500")
     @test length(logs) == 3
+end
+
+
+@testset "Programmatically defined levels" begin
+    limit_logging(Info)
+    logs = collect_logs() do
+        for level ∈ [Info,Warn]
+            @logmsg level "X"
+        end
+    end
+
+    @test logs[1] ⊃ (Info, "X")
+    @test logs[2] ⊃ (Warn, "X")
+    @test length(logs) == 2
 end
 
 #-------------------------------------------------------------------------------
