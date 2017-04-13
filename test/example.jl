@@ -48,7 +48,7 @@ end
 @info ".......... Simple progress logging .........."
 for i=1:100
     sleep(0.01)
-    i%20 != 0 || @warn "foo"
+    i%40 != 0 || @warn "foo"
     @info "algorithm1" progress=i/100
 end
 
@@ -59,12 +59,18 @@ for i=1:100
 end
 
 
-@info ".......... Redirect logging to a file .........."
-logfile = open("log.txt", "w")
-with_logger(MicroLogging.LogHandler(logfile, false)) do
-    @info "Logging redirected to a file"
+@info ".......... Redirect logging to an IO stream .........."
+logstream = IOBuffer()
+with_logger(MicroLogging.LogHandler(logstream, false)) do
+    @info "Logging redirected"
     LogTest.f(3)
 end
-close(logfile)
 
-@info "Now directed back to stderr"
+@info """
+Now directed back to stderr.
+Contents of redirected IO stream buffer:
+................................
+$(takebuf_string(logstream))
+................................
+"""
+
