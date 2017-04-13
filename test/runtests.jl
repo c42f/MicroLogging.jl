@@ -176,10 +176,9 @@ end
 
 
 #-------------------------------------------------------------------------------
-# Heirarchy
+# Per-module log limiting
 @eval module A
     using MicroLogging
-
     function a()
         @debug "a"
         @info  "a"
@@ -189,37 +188,22 @@ end
 
     module B
         using MicroLogging
-
         function b()
             @debug "b"
             @info  "b"
             @warn  "b"
             @error "b"
         end
-
-        module C
-            using MicroLogging
-
-            function c()
-                @debug "c"
-                @info  "c"
-                @warn  "c"
-                @error "c"
-            end
-        end
     end
 end
 
 @testset "Logger heirarchy" begin
     limit_logging(A, Info)
-    # Override root handler for module B and its children
     limit_logging(A.B, Warn)
-    limit_logging(A.B.C, Error)
 
     logs = collect_logs() do
         A.a()
         A.B.b()
-        A.B.C.c()
     end
 
     @test logs[1] ⊃ LogRecord(Info , "a", module_=A)
@@ -228,8 +212,36 @@ end
 
     @test logs[4] ⊃ LogRecord(Warn , "b", module_=A.B)
     @test logs[5] ⊃ LogRecord(Error, "b", module_=A.B)
-
-    @test logs[6] ⊃ LogRecord(Error, "c", module_=A.B.C)
 end
 
+
+#-------------------------------------------------------------------------------
+
+# Custom log levels
+
+@eval module LogLevelTest
+    using MicroLogging
+
+    immutable MyLevel
+        level::Int
+    end
+
+    const critical = MyLevel(100)
+    const debug_verbose = MyLevel(-100)
+
+    MicroLogging.shouldlog(lg::Logger, l2::MyLevel) = Int(lg.min_level) <= l2.level
+end
+
+@testset "Custom log levels" begin
+    logs = collect_logs() do
+        @logmsg LogLevelTest.critical "blah"
+        @logmsg LogLevelTest.debug_verbose "blah"
+    end
+
+    @test logs[1] ⊃ (LogLevelTest.critical, "blah")
+    @test length(logs) == 1
+end
+
+
+#-------------------------------------------------------------------------------
 end
