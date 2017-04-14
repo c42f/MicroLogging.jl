@@ -61,7 +61,7 @@ end
 
 @info ".......... Redirect logging to an IO stream .........."
 logstream = IOBuffer()
-with_logger(MicroLogging.LogHandler(logstream, false)) do
+with_logger(SimpleLogger(logstream, false)) do
     @info "Logging redirected"
     LogTest.f(3)
 end

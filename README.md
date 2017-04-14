@@ -74,7 +74,7 @@ end
 
 @info ".......... Redirect logging to an IO stream .........."
 logstream = IOBuffer()
-with_logger(MicroLogging.LogHandler(logstream, false)) do
+with_logger(SimpleLogger(logstream, false)) do
     @info "Logging redirected"
     LogTest.f(3)
 end
@@ -146,8 +146,8 @@ To achieve early filtering, this example currently expands to something like
 
 ```julia
 mod_log_ctx = $(get_logger(current_module()))
-if shouldlog(mod_log_ctx, MicroLogging.Info)
-    handlelog(log_handler(), "my value is x = $x", #=...=#)
+if shouldlog(mod_log_ctx, Info)
+    logmsg(current_logger(), Info, "my value is x = $x", #=...=#)
 end
 ```
 
@@ -187,9 +187,9 @@ these programmers to control log dispatch per call stack (that is, per
 task/thread):
 
 ```julia
-handler = MyLogHandler(#= ... =#)
+logger = MyLogger(#= ... =#)
 
-with_logger(handler) do
+with_logger(logger) do
     Package1.foo()
     Package2.bar()
     Package2.baz()

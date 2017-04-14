@@ -2,9 +2,16 @@ __precompile__()
 
 module MicroLogging
 
-export Logger,
+export
+    # Frontend
     @debug, @info, @warn, @error, @logmsg,
-    with_logger, get_logger, limit_logging
+    # Log control
+    with_logger, current_logger,
+    limit_logging,
+    # Logger methods
+    logmsg,
+    # Example logger
+    SimpleLogger
 
 
 """
@@ -20,28 +27,7 @@ include("handlers.jl")
 
 
 #-------------------------------------------------------------------------------
-type Logger
-    min_level::LogLevel
-    children::Vector
-end
-
-Logger(parent::Logger) =
-    Logger(parent.min_level, Vector{Any}())
-
-Logger(level::LogLevel) = Logger(level, Vector{Any}())
-
-Base.push!(parent::Logger, child) = push!(parent.children, child)
-
-"""
-    shouldlog(logger, level)
-
-Determine whether messages of severity `level` should be sent to `logger`.
-"""
-shouldlog(logger::Logger, level) = logger.min_level <= level
-
-
-#-------------------------------------------------------------------------------
-# Logging macros
+# Logging macros and frontend
 
 macro logmsg(level, message, exs...)
     level = esc(level)
@@ -54,17 +40,19 @@ macro logmsg(level, message, exs...)
         push!(kwargs, Expr(:kw, ex.args[1], esc(ex.args[2])))
     end
     module_ = current_module()
-    logger = get_logger(module_)
+    loglimit = log_limiter(module_)
     # FIXME: The following dubious hack gives an approximate line number
     # only - the line of the start of the toplevel expression! See #1.
     lineno = Int(unsafe_load(cglobal(:jl_lineno, Cint)))
     id = Expr(:quote, gensym())
     quote
-        logger = $logger
-        if shouldlog(logger, $level)
-            handlelog(log_handler(), $level, $message;
-                id=$id, module_=$module_, location=(@__FILE__, $lineno),
-                $(kwargs...))
+        loglimit = $loglimit
+        if shouldlog(loglimit, $level)
+            logger = current_logger()
+            # FIXME: Test whether shouldlog(logger,level,id) here is worthwhile
+            logmsg(logger, $level, $message;
+                   id=$id, module_=$module_, location=(@__FILE__, $lineno),
+                   $(kwargs...))
         end
         nothing
     end
@@ -75,44 +63,93 @@ macro  info(message, exs...)  :(@logmsg Info  $(esc(message)) $(map(esc, exs)...
 macro  warn(message, exs...)  :(@logmsg Warn  $(esc(message)) $(map(esc, exs)...))  end
 macro error(message, exs...)  :(@logmsg Error $(esc(message)) $(map(esc, exs)...))  end
 
+"""
+    function logmsg(logger, level, message; kwargs)
+
+Dispatch `message` to `logger` at `level`.
+
+FIXME: Refine and document keywords.
+"""
+function logmsg end
 
 #-------------------------------------------------------------------------------
-# Registry of module loggers
-const _registered_loggers = Dict{Module,Any}()
-_global_handler = nothing
+# Logger control and lookup
 
-function __init__()
-    _registered_loggers[Main] = Logger(Info)
-    global _global_handler = LogHandler(STDERR)
+"""
+    with_logger(function, logger)
+
+Execute `function`, directing all log messages to `logger`.
+
+# Example
+
+```julia
+function test(x)
+    @info "x = \$x"
 end
 
+with_logger(logger) do
+    test(1)
+    test([1,2])
+end
+```
+"""
+with_logger(f::Function, loghandler) = task_local_storage(f, :CURRENT_LOGGER, loghandler)
+
+
+_global_logger = nothing  # See __init__
 
 """
-    get_logger(context)
+    current_logger()
 
-Get the logger which should be used to dispatch messages for `context`.
-
-When `context` is a module, the global logger instance for the module will be
-returned; if this doesn't yet exist, it will be created and added to a logger
-heirarchy with parent equal to `parent_module(context)`.
+Return the logger for the current task, or the global logger if none is
+specified.
 """
-function get_logger(mod::Module=Main)
-    get!(_registered_loggers, mod) do
-        parent = get_logger(module_parent(mod))
-        logger = Logger(parent)
-        push!(parent, logger)
-        logger
+current_logger() = get(task_local_storage(), :CURRENT_LOGGER, _global_logger)
+
+
+#-------------------------------------------------------------------------------
+# Per-module log limiting machinery
+
+type LogLimit
+    min_level::LogLevel
+    children::Vector{LogLimit}
+end
+
+LogLimit(parent::LogLimit) = LogLimit(parent.min_level, Vector{LogLimit}())
+LogLimit(level::LogLevel)  = LogLimit(level, Vector{LogLimit}())
+
+Base.push!(parent::LogLimit, child) = push!(parent.children, child)
+
+"""
+    shouldlog(logger, level)
+
+Determine whether messages of severity `level` should be sent to `logger`.
+"""
+shouldlog(logger::LogLimit, level) = logger.min_level <= level
+
+
+const _registered_limiters = Dict{Module,LogLimit}() # See __init__
+
+# Get the LogLimit object which should be used to control the minimum log level
+# for module `mod`.
+function log_limiter(mod::Module=Main)
+    get!(_registered_limiters, mod) do
+        parent = log_limiter(module_parent(mod))
+        loglimit = LogLimit(parent)
+        push!(parent, loglimit)
+        loglimit
     end
 end
 
-#-------------------------------------------------------------------------------
-# Log system config
 """
     limit_logging(module, level)
 
-Limit logging to levels greater than or equal to `level`.
+Limit log messages from `module` and its submodules to levels greater than or
+equal to `level`, which defaults to Info when a module is loaded.  This is a
+*global* setting per module, intended to make debug logging extremely cheap
+when disabled.
 """
-function limit_logging(logger::Logger, level)
+function limit_logging(logger::LogLimit, level)
     logger.min_level = level
     for child in logger.children
         limit_logging(child, level)
@@ -120,10 +157,13 @@ function limit_logging(logger::Logger, level)
 end
 
 limit_logging(level) = limit_logging(Main, level)
-limit_logging(mod::Module, level) = limit_logging(get_logger(mod), level)
+limit_logging(mod::Module, level) = limit_logging(log_limiter(mod), level)
 
-with_logger(f::Function, loghandler) = task_local_storage(f, :LOG_HANDLER, loghandler)
-log_handler() = get(task_local_storage(), :LOG_HANDLER, _global_handler)
+
+function __init__()
+    _registered_limiters[Main] = LogLimit(Info)
+    global _global_logger = SimpleLogger(STDERR)
+end
 
 
 end

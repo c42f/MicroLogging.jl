@@ -21,26 +21,26 @@ end
 
 LogRecord(level::LogLevel, message; kwargs...) = LogRecord(level, message, kwargs)
 
-type TestHandler
+type TestLogger
     records::Vector{LogRecord}
 end
 
 
-TestHandler() = TestHandler(LogRecord[])
+TestLogger() = TestLogger(LogRecord[])
 
-function MicroLogging.handlelog(handler::TestHandler, level, msg; kwargs...)
-    push!(handler.records, LogRecord(level, msg, kwargs))
+function MicroLogging.logmsg(logger::TestLogger, level, msg; kwargs...)
+    push!(logger.records, LogRecord(level, msg, kwargs))
 end
 
 function collect_logs(f::Function)
-    handler = TestHandler()
-    with_logger(f, handler)
-    handler.records
+    logger = TestLogger()
+    with_logger(f, logger)
+    logger.records
 end
 
-getlog!(handler::TestHandler) = shift!(handler.records)
+getlog!(logger::TestLogger) = shift!(logger.records)
 
-Base.isempty(handler::TestHandler) = isempty(handler.records)
+Base.isempty(logger::TestLogger) = isempty(logger.records)
 
 
 function record_matches(r, ref::Tuple)
@@ -229,7 +229,7 @@ end
     const critical = MyLevel(100)
     const debug_verbose = MyLevel(-100)
 
-    MicroLogging.shouldlog(lg::Logger, l2::MyLevel) = Int(lg.min_level) <= l2.level
+    MicroLogging.shouldlog(lg::MicroLogging.LogLimit, l2::MyLevel) = Int(lg.min_level) <= l2.level
 end
 
 @testset "Custom log levels" begin
