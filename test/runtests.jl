@@ -164,8 +164,8 @@ end
     kwargs = Dict(logs[1].kwargs)
 
     # Builtin metadata
-    @test kwargs[:location][1] == Base.source_path()
-    @test_broken kwargs[:location][2] == kwargs[:real_line] # See #1
+    @test kwargs[:file_] == Base.source_path()
+    @test_broken kwargs[:line_] == kwargs[:real_line] # See #1
     @test kwargs[:module_] == Main
     @test isa(kwargs[:id], Symbol)
 

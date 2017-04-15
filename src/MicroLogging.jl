@@ -53,7 +53,7 @@ macro logmsg(level, message, exs...)
             logger = current_logger()
             # FIXME: Test whether shouldlog(logger,level,id) here is worthwhile
             logmsg(logger, $level, $message;
-                   id=$id, module_=$module_, location=(@__FILE__, $lineno),
+                   id=$id, module_=$module_, file_=@__FILE__, line_=$lineno,
                    $(kwargs...))
         end
         nothing

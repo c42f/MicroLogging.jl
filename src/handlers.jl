@@ -71,7 +71,7 @@ end
 
 
 function logmsg(logger::SimpleLogger, level, msg::AbstractString; module_=nothing,
-                id=nothing, once=false, max_log=-1, location=("",0), progress=nothing, kwargs...)
+                id=nothing, once=false, max_log=-1, file_="", line_=0, progress=nothing, kwargs...)
     # Additional log filtering
     if once || max_log >= 0
         if once
@@ -85,12 +85,12 @@ function logmsg(logger::SimpleLogger, level, msg::AbstractString; module_=nothin
         end
     end
     # Log printing
-    filename = location[1] === nothing ? "REPL" : basename(location[1])
+    filename = file_ === nothing ? "REPL" : basename(file_)
     if logger.interactive_style
         color, bold, levelstr = levelstyle(level)
         # Attempt at avoiding the problem of distracting metadata in info log
         # messages - print metadata to the right hand side.
-        metastr = "[$(module_):$(filename):$(location[2])] $levelstr"
+        metastr = "[$module_:$filename:$line_] $levelstr"
         msg = rstrip(msg, '\n')
         if progress === nothing
             if logger.prev_progress_key !== nothing
@@ -121,7 +121,7 @@ function logmsg(logger::SimpleLogger, level, msg::AbstractString; module_=nothin
             logger.prev_progress_key = progress_key
         end
     else
-        print(logger.stream, "$level [$(module_):$(filename):$(location[2])]: $msg")
+        print(logger.stream, "$level [$module_:$filename:$line_)]: $msg")
         if !endswith(msg, '\n')
             print(logger.stream, '\n')
         end
