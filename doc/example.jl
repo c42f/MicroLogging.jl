@@ -9,8 +9,10 @@ end
 end
 
 using MicroLogging
+using Compat
+using Base.Markdown
 
-@info ".......... Simple logging .........."
+@info md"# Simple logging"
 @info "Default level is info"
 @debug "I am an invisible debug message"
 
@@ -23,7 +25,10 @@ multiline
 string
 """
 
-@info ".......... Early filtering of logs per module, for efficiency .........."
+@info "Non-strings are converted to strings"
+@info reshape(1:16, (4,4))
+
+@info md"# Early filtering of logs per module, for efficiency"
 
 limit_logging(LogTest, MicroLogging.Warn)
 @info "Logging at Warn for LogTest module"
@@ -34,7 +39,7 @@ limit_logging(MicroLogging.Debug)
 LogTest.f(2)
 
 
-@info ".......... Log suppression with `once` and `max_log`: .........."
+@info md"# Log suppression with `once` and `max_log`"
 for i=1:20
     if i > 7
         @error "i=$i out of bounds (set once=true)" once=true
@@ -45,7 +50,7 @@ for i=1:20
 end
 
 
-@info ".......... Simple progress logging .........."
+@info md"# Simple progress logging"
 for i=1:100
     sleep(0.01)
     i%40 != 0 || @warn "foo"
@@ -59,18 +64,18 @@ for i=1:100
 end
 
 
-@info ".......... Redirect logging to an IO stream .........."
+@info md"# Redirect logging to an IO stream"
 logstream = IOBuffer()
 with_logger(SimpleLogger(logstream, false)) do
     @info "Logging redirected"
     LogTest.f(3)
 end
 
+@info "Now directed back to stderr"
 @info """
-Now directed back to stderr.
 Contents of redirected IO stream buffer:
 ................................
-$(takebuf_string(logstream))
+$(String(take!(logstream)))
 ................................
 """
 

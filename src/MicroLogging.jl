@@ -2,6 +2,8 @@ __precompile__()
 
 module MicroLogging
 
+using Compat
+
 export
     # Frontend
     @debug, @info, @warn, @error, @logmsg,
