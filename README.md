@@ -177,19 +177,18 @@ the state of the program.
 
 Here we've got to choose between lexical vs dynamic scope to look up the log
 handler code.  MicroLogging chooses a *dynamically scoped* log handler bound to
-the current task.  To understand why this is a good choice, consider the two
+the current task.  To understand why this might be good choice, consider the two
 audiences of a logging library:
 
 * *Package authors* want to emit logs in a simple way, without caring about how
   they're dispatched.
-* *System programmers* must care about the system as built up from many
-  packages. They need to control how logs are dispatched, but don't care about
-  how they're emitted.
+* *Application programmers* care about a complete application as built up from
+  many packages.  They need to control how log records are dispatched, but don't
+  get any control over how they're created.
 
-System programmers tend to be calling functions from many different packages to
-achieve an overall task. With dynamic scoping for log handlers, it's trival for
-these programmers to control log dispatch per call stack (that is, per
-task/thread):
+Application programmers tend to be calling functions from many different
+packages to achieve an overall task. With dynamic scoping for log handlers, it's
+easy to control log dispatch based on task.
 
 ```julia
 logger = MyLogger(#= ... =#)
@@ -210,6 +209,12 @@ implies a global entry point for log dispatch.  For example, the python
 community seems to have settled on using
 [per-module contexts](https://docs.python.org/3/library/logging.html#logger-objects)
 to dispatch log messages (TODO: double check how this works).
+
+TODO: Need more research about the tradeoff between thread-global lexically
+scoped loggers vs dynamically scoped loggers.  For example, Log4j 2 attacks this
+problem by adding thread context to log records via the
+["fish tagging"](https://logging.apache.org/log4j/2.x/manual/thread-context.html)
+approach.
 
 > Which metadata is automatically included with the log record?
 
