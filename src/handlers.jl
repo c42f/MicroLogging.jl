@@ -33,6 +33,13 @@ function logmsg(logger::SimpleLogger, level, msg::Markdown.MD; kwargs...)
     end
 end
 
+function logmsg(logger::SimpleLogger, level, ex_msg::Exception; backtrace=nothing, kwargs...)
+    bt = backtrace != nothing ? backtrace : catch_backtrace()
+    io = IOBuffer()
+    showerror(io, ex_msg, bt; backtrace=(bt!=nothing))
+    logmsg(logger, level, String(take!(io)); kwargs...)
+end
+
 # Length of a string as it will appear in the terminal (after ANSI color codes
 # are removed)
 function termlength(str)

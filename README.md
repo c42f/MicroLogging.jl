@@ -88,9 +88,16 @@ end
 @info """
 Contents of redirected IO stream buffer:
 ................................
-$(String(take!(logstream)))
+$(strip(String(take!(logstream))))
 ................................
 """
+
+@info md"# Exception reporting, with backtrace"
+try
+    1÷0
+catch err
+    @error err
+end
 ```
 
 The script above produces console output like the following.  Note the
