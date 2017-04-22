@@ -15,30 +15,52 @@ function SimpleLogger(stream::IO, interactive_style=isinteractive())
     SimpleLogger(stream, interactive_style, nothing, Dict{Symbol,Int}())
 end
 
-function logmsg(logger::SimpleLogger, level, msg; kwargs...)
-    logmsg(logger, level, string(msg); kwargs...)
+function shouldlog(logger::SimpleLogger, level, module_, filepath, line, id;
+                   once=false, max_log=-1, kwargs...)
+    if once || max_log >= 0
+        if once
+            max_log = 1
+        end
+        count = get!(logger.message_counts, id, 0)
+        count += 1
+        logger.message_counts[id] = count
+        if count > max_log
+            return false
+        end
+    end
+    return true
 end
 
-function logmsg(logger::SimpleLogger, level, msg::Markdown.MD; kwargs...)
+function formatmsg(logger::SimpleLogger, io, msg)
+    print(io, msg)
+end
+
+function formatmsg(logger::SimpleLogger, io, msg::Markdown.MD)
     if logger.interactive_style
         # Hack: render markdown to temporary buffer, and munge it to remove
         # trailing newlines, even with confounding color codes.
-        io = IOBuffer()
-        Markdown.term(io, msg)
-        msg = String(take!(io))
+        io2 = IOBuffer()
+        Markdown.term(io2, msg)
+        msg = String(take!(io2))
         msg = replace(msg, r"\n(\e\[[0-9]+m)$", s"\1")
-        logmsg(logger, level, msg; kwargs...)
+        print(io, msg)
     else
-        logmsg(logger, level, string(msg); kwargs...)
+        print(io, msg)
     end
 end
 
-function logmsg(logger::SimpleLogger, level, ex_msg::Exception; backtrace=nothing, kwargs...)
-    bt = backtrace != nothing ? backtrace : catch_backtrace()
-    io = IOBuffer()
+function formatmsg(logger::SimpleLogger, io, ex_msg::Exception)
+    bt = catch_backtrace()
     showerror(io, ex_msg, bt; backtrace=(bt!=nothing))
-    logmsg(logger, level, String(take!(io)); kwargs...)
 end
+
+function formatmsg(logger::SimpleLogger, io, msg::Tuple)
+    foreach(msg) do m
+        formatmsg(logger, io, m)
+        write(io, '\n')
+    end
+end
+
 
 # Length of a string as it will appear in the terminal (after ANSI color codes
 # are removed)
@@ -76,28 +98,21 @@ function print_with_col(color, io, str; bold=false)
     end
 end
 
+function logmsg(logger::SimpleLogger, level, msg, module_, filepath, line, id; kwargs...)
+    io = IOBuffer()
+    formatmsg(logger, io, msg)
+    logmsg(logger, level, String(take!(io)), module_, filepath, line, id; kwargs...)
+end
 
-function logmsg(logger::SimpleLogger, level, msg::AbstractString; module_=nothing,
-                id=nothing, once=false, max_log=-1, file_="", line_=0, progress=nothing, kwargs...)
-    # Additional log filtering
-    if once || max_log >= 0
-        if once
-            max_log = 1
-        end
-        count = get!(logger.message_counts, id, 0)
-        count += 1
-        logger.message_counts[id] = count
-        if count > max_log
-            return
-        end
-    end
+function logmsg(logger::SimpleLogger, level, msg::AbstractString, module_, filepath, line, id;
+                progress=nothing, kwargs...)
     # Log printing
-    filename = file_ === nothing ? "REPL" : basename(file_)
+    filename = filepath === nothing ? "REPL" : basename(filepath)
     if logger.interactive_style
         color, bold, levelstr = levelstyle(level)
         # Attempt at avoiding the problem of distracting metadata in info log
         # messages - print metadata to the right hand side.
-        metastr = "[$module_:$filename:$line_] $levelstr"
+        metastr = "[$module_:$filename:$line] $levelstr"
         msg = rstrip(msg, '\n')
         if progress === nothing
             if logger.prev_progress_key !== nothing
@@ -128,7 +143,7 @@ function logmsg(logger::SimpleLogger, level, msg::AbstractString; module_=nothin
             logger.prev_progress_key = progress_key
         end
     else
-        print(logger.stream, "$level [$module_:$filename:$line_)]: $msg")
+        print(logger.stream, "$level [$module_:$filename:$line]: $msg")
         if !endswith(msg, '\n')
             print(logger.stream, '\n')
         end

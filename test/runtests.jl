@@ -16,20 +16,27 @@ end
 type LogRecord
     level
     message
+    module_
+    filepath
+    line
+    id
     kwargs
 end
 
-LogRecord(level::LogLevel, message; kwargs...) = LogRecord(level, message, kwargs)
+LogRecord(args...; kwargs...) = LogRecord(args..., kwargs)
+LogRecord(level, msg, module_=nothing, filepath=nothing, line=nothing, id=nothing; kwargs...) = LogRecord(level, msg, module_, filepath, line, id, kwargs)
 
 type TestLogger
     records::Vector{LogRecord}
 end
 
-
 TestLogger() = TestLogger(LogRecord[])
 
-function MicroLogging.logmsg(logger::TestLogger, level, msg; kwargs...)
-    push!(logger.records, LogRecord(level, msg, kwargs))
+
+MicroLogging.shouldlog(logger::TestLogger, level, module_, filepath, line, id; kwargs...) = true
+
+function MicroLogging.logmsg(logger::TestLogger, level, msg, module_, filepath, line, id; kwargs...)
+    push!(logger.records, LogRecord(level, msg, module_, filepath, line, id, kwargs))
 end
 
 function collect_logs(f::Function)
@@ -48,7 +55,11 @@ function record_matches(r, ref::Tuple)
 end
 
 function record_matches(r, ref::LogRecord)
-    (r.level, r.message) == (ref.level, ref.message) || return false
+    (r.level, r.message) == (ref.level, ref.message)        || return false
+    (ref.module_  == nothing || r.module_  == ref.module_)  || return false
+    (ref.filepath == nothing || r.filepath == ref.filepath) || return false
+    (ref.line     == nothing || r.line     == ref.line)     || return false
+    (ref.id       == nothing || r.id       == ref.id)       || return false
     rkw = Dict(r.kwargs)
     for (k,v) in ref.kwargs
         (haskey(rkw, k) && rkw[k] == v) || return false
@@ -161,13 +172,15 @@ end
     end
     @test length(logs) == 1
 
-    kwargs = Dict(logs[1].kwargs)
+    record = logs[1]
+
+    kwargs = Dict(record.kwargs)
 
     # Builtin metadata
-    @test kwargs[:file_] == Base.source_path()
-    @test_broken kwargs[:line_] == kwargs[:real_line] # See #1
-    @test kwargs[:module_] == Main
-    @test isa(kwargs[:id], Symbol)
+    @test record.module_ == Main
+    @test record.filepath == Base.source_path()
+    @test_broken record.line == kwargs[:real_line] # See #1
+    @test isa(record.id, Symbol)
 
     # User-defined metadata
     @test kwargs[:progress] == 0.1
@@ -206,12 +219,12 @@ end
         A.B.b()
     end
 
-    @test logs[1] ⊃ LogRecord(Info , "a", module_=A)
-    @test logs[2] ⊃ LogRecord(Warn , "a", module_=A)
-    @test logs[3] ⊃ LogRecord(Error, "a", module_=A)
+    @test logs[1] ⊃ LogRecord(Info , "a", A)
+    @test logs[2] ⊃ LogRecord(Warn , "a", A)
+    @test logs[3] ⊃ LogRecord(Error, "a", A)
 
-    @test logs[4] ⊃ LogRecord(Warn , "b", module_=A.B)
-    @test logs[5] ⊃ LogRecord(Error, "b", module_=A.B)
+    @test logs[4] ⊃ LogRecord(Warn , "b", A.B)
+    @test logs[5] ⊃ LogRecord(Error, "b", A.B)
 end
 
 
