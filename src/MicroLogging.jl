@@ -32,11 +32,12 @@ include("handlers.jl")
 # Logging macros and frontend
 
 """
-    @debug message  [key=value ...]  [log_control_hints]
-    @info  message  [key=value ...]  [log_control_hints]
-    @warn  message  [key=value ...]  [log_control_hints]
-    @error message  [key=value ...]  [log_control_hints]
-    @logmsg level message [key=value ...]  [log_control_hints]
+      @debug message  [key=value ...]
+      @info  message  [key=value ...]
+      @warn  message  [key=value ...]
+      @error message  [key=value ...]
+
+      @logmsg level message [key=value ...]
 
 Create a log record with an informational `message`.  For convenience, four
 logging macros `@debug`, `@info`, `@warn` and `@error` are defined which log at
@@ -120,12 +121,19 @@ macro logmsg(level, message, exs...)
         loglimit = $loglimit
         if shouldlog(loglimit, $level)
             logger = current_logger()
-            # Bind log message generation into a closure, allowing us to defer
-            # creation and formatting of messages until after filtering.
-            create_msg = (logger, level, module_, filepath, line, id) ->
-                logmsg(logger, level, $message, module_, filepath, line, id; $(kwargs...))
-            dispatchmsg(logger, $level, $module_, @__FILE__, $lineno, $id, create_msg;
-                        $(logcontrol_kwargs...))
+            # Second chance at an early bail-out based on arbitrary
+            # logger-specific logic.
+            #
+            # FIXME: Passing keyword arguments to the generic dispatch here
+            # kills performance pretty badly.
+            if shouldlog(logger, $level, $module_, @__FILE__, $lineno, $id;
+                         $(logcontrol_kwargs...))
+                # Bind log message generation into a closure, allowing us to defer
+                # creation and formatting of messages until after filtering.
+                create_msg = (logger, level, module_, filepath, line, id) ->
+                    logmsg(logger, level, $message, module_, filepath, line, id; $(kwargs...))
+                dispatchmsg(logger, $level, $module_, @__FILE__, $lineno, $id, create_msg)
+            end
         end
         nothing
     end
@@ -169,32 +177,29 @@ Determine whether messages of severity `level` should be generated according to
 function shouldlog end
 
 
-function dispatchmsg(logger, level, module_, filepath, line, id, create_msg; log_control...)
-    # If `!shouldlog()`, we get a second chance at an early bail-out based on
-    # arbitrary logger-specific logic.
-    if shouldlog(logger, level, module_, filepath, line, id; log_control...)
-        # Catch all exceptions, to prevent log message generation from crashing
-        # the program.  This lets users confidently toggle little-used
-        # functionality - such as debug logging - in a production system.
-        #
-        # Users need to override and disable this if they want to use logging
-        # as an audit trail.
+function dispatchmsg(logger, level, module_, filepath, line, id, create_msg)
+    # Catch all exceptions, to prevent log message generation from crashing
+    # the program.  This lets users confidently toggle little-used
+    # functionality - such as debug logging - in a production system.
+    #
+    # Users need to override and disable this if they want to use logging
+    # as an audit trail.
+    try
+        create_msg(logger, level, module_, filepath, line, id)
+    catch err
+        # Try really hard to get the message to the logger, with
+        # progressively less information.
         try
-            create_msg(logger, level, module_, filepath, line, id)
-        catch err
-            # Try really hard to get the message to the logger, with
-            # progressively less information.
+            msg = ("Error formatting log message at location ($module_,$filepath,$line).", err)
+            logmsg(logger, Error, msg, module_, filepath, line, id)
+        catch
             try
-                msg = ("Error formatting log message at location ($module_,$filepath,$line).", err)
-                logmsg(logger, Error, msg, module_, filepath, line, id)
+                logmsg(logger, Error, "Error formatting log message", module_, filepath, line, id)
             catch
-                try
-                    logmsg(logger, Error, "Error formatting log message", module_, filepath, line, id)
-                catch
-                end
             end
         end
     end
+    nothing
 end
 
 #-------------------------------------------------------------------------------
