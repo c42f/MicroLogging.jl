@@ -1,32 +1,35 @@
 """
-    SimpleLogger(stream::IO, [interactive_style=isinteractive()])
+    SimpleLogger(stream::IO; min_level=Info, interactive_style=isinteractive())
 
 Simplistic logger for logging to a terminal or noninteractive stream, with
 basic per-level color support.
 """
 type SimpleLogger
     stream::IO
+    min_level::LogLevel
     interactive_style::Bool
     prev_progress_key
     message_counts::Dict{Symbol,Int}
 end
 
-function SimpleLogger(stream::IO, interactive_style=isinteractive())
-    SimpleLogger(stream, interactive_style, nothing, Dict{Symbol,Int}())
+function SimpleLogger(stream::IO; min_level=Info, interactive_style=isinteractive())
+    SimpleLogger(stream, min_level, interactive_style, nothing, Dict{Symbol,Int}())
 end
 
-function shouldlog(logger::SimpleLogger, level, module_, filepath, line, id;
-                   once=false, max_log=-1, kwargs...)
-    if once || max_log >= 0
-        if once
-            max_log = 1
-        end
+function shouldlog(logger::SimpleLogger, level, module_, filepath, line, id, max_log, progress)
+    if !(logger.min_level <= level)
+        return false
+    end
+    if max_log !== nothing
         count = get!(logger.message_counts, id, 0)
         count += 1
         logger.message_counts[id] = count
         if count > max_log
             return false
         end
+    end
+    if progress !== nothing
+        # TODO: progress throttling?
     end
     return true
 end

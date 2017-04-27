@@ -32,9 +32,6 @@ end
 
 TestLogger() = TestLogger(LogRecord[])
 
-
-MicroLogging.shouldlog(logger::TestLogger, level, module_, filepath, line, id; kwargs...) = true
-
 function MicroLogging.logmsg(logger::TestLogger, level, msg, module_, filepath, line, id; kwargs...)
     push!(logger.records, LogRecord(level, msg, module_, filepath, line, id, kwargs))
 end
@@ -147,7 +144,6 @@ end
     @test length(logs) == 3
 end
 
-
 @testset "Programmatically defined levels" begin
     limit_logging(Info)
     logs = collect_logs() do
@@ -160,6 +156,7 @@ end
     @test logs[2] ⊃ (Warn, "X")
     @test length(logs) == 2
 end
+
 
 #-------------------------------------------------------------------------------
 # Log record structure

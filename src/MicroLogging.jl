@@ -8,7 +8,7 @@ export
     # Frontend
     @debug, @info, @warn, @error, @logmsg,
     # Log control
-    with_logger, current_logger,
+    with_logger, current_logger, global_logger,
     limit_logging,
     # Logger methods
     logmsg, shouldlog,
@@ -88,9 +88,8 @@ level = Info
 
 """
 macro logmsg(level, message, exs...)
-    level = esc(level)
-    message = esc(message)
-    logcontrol_kwargs = Any[]
+    progress = nothing
+    max_log = nothing
     kwargs = Any[]
     for ex in exs
         if !isa(ex,Expr)
@@ -102,7 +101,15 @@ macro logmsg(level, message, exs...)
                 if !isa(keyval, Expr) || keyval.head != :(=) || !isa(keyval.args[1], Symbol)
                     throw(ArgumentError("Expected key value pair inside log control, got $keyval"))
                 end
-                push!(logcontrol_kwargs, Expr(:kw, keyval.args[1], esc(keyval.args[2])))
+                k,v = keyval.args
+                if k == :max_log
+                    max_log = v
+                elseif k == :progress
+                    progress = v
+                    push!(kwargs, Expr(:kw, k, v))
+                else
+                    throw(ArgumentError("Unknown log control $k"))
+                end
             end
         elseif ex.head == :(=) && isa(ex.args[1], Symbol)
             # Match key value pairs for structured log records
@@ -117,17 +124,14 @@ macro logmsg(level, message, exs...)
     # only - the line of the start of the toplevel expression! See #1.
     lineno = Int(unsafe_load(cglobal(:jl_lineno, Cint)))
     id = Expr(:quote, gensym())
+    level = esc(level)
     quote
         loglimit = $loglimit
         if shouldlog(loglimit, $level)
             logger = current_logger()
-            # Second chance at an early bail-out based on arbitrary
+            # Second chance at an early bail-out, based on arbitrary
             # logger-specific logic.
-            #
-            # FIXME: Passing keyword arguments to the generic dispatch here
-            # kills performance pretty badly.
-            if shouldlog(logger, $level, $module_, @__FILE__, $lineno, $id;
-                         $(logcontrol_kwargs...))
+            if shouldlog(logger, $level, $module_, @__FILE__, $lineno, $id, $max_log, $progress)
                 # Bind log message generation into a closure, allowing us to defer
                 # creation and formatting of messages until after filtering.
                 create_msg = (logger, level, module_, filepath, line, id) ->
@@ -162,22 +166,25 @@ function logmsg end
 
 
 """
-    shouldlog(logger, level, module_, filepath, line, id; [key1=value1, ...])
+    shouldlog(logger, level, module_, filepath, line, id, max_log, progress)
 
 Return true when `logger` accepts a message at `level`, generated at source
-location (`module_`,`filepath`,`line`) with unique log identifier `id`.  The
-optional key value pairs `key1=value1, ...` are log control hints supplied at
-the log site (see `@logmsg`).  By convention, 
+location (`module_`,`filepath`,`line`) with unique log identifier `id`.
+Additional log control hints supplied at the log site are `max_log` and
+`progress` (see `@logmsg`), which are passed in here to allow for efficient log
+filtering.
 
     shouldlog(module_limit::LogLimit, level)
 
 Determine whether messages of severity `level` should be generated according to
 `module_limit`.
 """
-function shouldlog end
+function shouldlog(logger, level, module_, filepath, line, id, max_log, progress)
+    true
+end
 
 
-function dispatchmsg(logger, level, module_, filepath, line, id, create_msg)
+function dispatchmsg(logger, level, module_, filepath, line, id, create_msg::ANY)
     # Catch all exceptions, to prevent log message generation from crashing
     # the program.  This lets users confidently toggle little-used
     # functionality - such as debug logging - in a production system.
@@ -205,6 +212,21 @@ end
 #-------------------------------------------------------------------------------
 # Logger control and lookup
 
+_global_logger = nothing  # See __init__
+
+"""
+    global_logger()
+
+Return the global logger, used to receive messages when no specific logger
+exists for the current task.
+
+    global_logger(logger)
+
+Set the global logger to `logger`.
+"""
+global_logger() = _global_logger
+global_logger(logger) = (global _global_logger = logger; )
+
 """
     with_logger(function, logger)
 
@@ -224,9 +246,6 @@ end
 ```
 """
 with_logger(f::Function, loghandler) = task_local_storage(f, :CURRENT_LOGGER, loghandler)
-
-
-_global_logger = nothing  # See __init__
 
 """
     current_logger()
