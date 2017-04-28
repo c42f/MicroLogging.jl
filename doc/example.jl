@@ -42,8 +42,7 @@ LogTest.f(2)
 @info md"# Log suppression with `once` and `max_log`"
 for i=1:20
     if i > 7
-        @error "i=$i out of bounds (set once=true)" once=true
-        @warn "i=$i out of bounds (set max_log=2)" max_log=2
+        @warn "i=$i out of bounds (set max_log=2)" [max_log=2]
         continue
     end
     @info "The value of (1+i) is $(1+i)"
@@ -66,7 +65,7 @@ end
 
 @info md"# Redirect logging to an IO stream"
 logstream = IOBuffer()
-with_logger(SimpleLogger(logstream, false)) do
+with_logger(SimpleLogger(logstream, interactive_style=false)) do
     @info "Logging redirected"
     LogTest.f(3)
 end
