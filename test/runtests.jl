@@ -1,7 +1,7 @@
 using MicroLogging
 using Base.Test
 
-import MicroLogging: LogLevel, Debug, Info, Warn, Error
+import MicroLogging: LogLevel, Debug, Info, Warn, Error, find_var_uses
 
 if VERSION < v"0.6-"
     # Override Test.@test_broken, which is broken on julia-0.5!
@@ -157,7 +157,6 @@ end
     @test length(logs) == 2
 end
 
-
 #-------------------------------------------------------------------------------
 # Log record structure
 
@@ -254,4 +253,7 @@ end
 
 
 #-------------------------------------------------------------------------------
+
+include("util.jl")
+
 end
