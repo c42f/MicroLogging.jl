@@ -320,7 +320,7 @@ end
 
 
 function __init__()
-    _registered_limiters[Main] = LogLimit(Info)
+    _registered_limiters[Main] = LogLimit(BelowMinLevel)
     global _global_logger = SimpleLogger(STDERR)
 end
 
