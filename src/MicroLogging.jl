@@ -9,7 +9,7 @@ export
     @debug, @info, @warn, @error, @logmsg,
     # Log control
     with_logger, current_logger, global_logger,
-    limit_logging,
+    disable_logging, enable_logging,
     # Logger methods
     logmsg, shouldlog,
     # Example logger
@@ -22,7 +22,7 @@ Severity/verbosity of a log record.
 The log level provides a key against which log records may be filtered before
 any work is done formatting the log message and other metadata.
 """
-@enum LogLevel Debug Info Warn Error
+@enum LogLevel BelowMinLevel=typemin(Int32) Debug=-1000 Info=0 Warn=1000 Error=2000 NoLogs=typemax(Int32)
 
 
 include("handlers.jl")
@@ -264,25 +264,25 @@ current_logger() = get(task_local_storage(), :CURRENT_LOGGER, _global_logger)
 
 
 #-------------------------------------------------------------------------------
-# Per-module log limiting machinery
+# Basic log control and per-module log limiting machinery
 
 type LogLimit
-    min_level::LogLevel
+    max_disabled_level::LogLevel
     children::Vector{LogLimit}
 end
 
-LogLimit(parent::LogLimit) = LogLimit(parent.min_level, Vector{LogLimit}())
+LogLimit(parent::LogLimit) = LogLimit(parent.max_disabled_level, Vector{LogLimit}())
 LogLimit(level::LogLevel)  = LogLimit(level, Vector{LogLimit}())
 
 Base.push!(parent::LogLimit, child) = push!(parent.children, child)
 
-shouldlog(limit::LogLimit, level) = limit.min_level <= level
+shouldlog(limit::LogLimit, level) = level > limit.max_disabled_level
 
 const _registered_limiters = Dict{Module,LogLimit}() # See __init__
 
 # Get the LogLimit object which should be used to control the minimum log level
 # for module `mod`.
-function log_limiter(mod::Module=Main)
+function log_limiter(mod::Module)
     get!(_registered_limiters, mod) do
         parent = log_limiter(module_parent(mod))
         loglimit = LogLimit(parent)
@@ -291,23 +291,32 @@ function log_limiter(mod::Module=Main)
     end
 end
 
-"""
-    limit_logging(module, level)
 
-Limit log messages from `module` and its submodules to levels greater than or
-equal to `level`, which defaults to Info when a module is loaded.  This is a
-*global* setting per module, intended to make debug logging extremely cheap
-when disabled.
 """
-function limit_logging(logger::LogLimit, level)
-    logger.min_level = level
-    for child in logger.children
-        limit_logging(child, level)
+    enable_logging(logger=global_logger(), level)
+
+Enable logging for all messages with log level greater than or equal to
+`level`.  `logger` defaults to `global_logger()`.
+"""
+enable_logging(level) = enable_logging(global_logger(), level)
+
+
+"""
+    disable_logging(module, level)
+
+Disable all log messages from `module` and its submodules, at log levels equal
+to or less than `level`.  This is a *global* setting per module, intended to
+make debug logging extremely cheap when disabled.
+"""
+disable_logging(mod::Module, level) = disable_logging(log_limiter(mod), level)
+disable_logging(level) = disable_logging(Main, level)
+
+function disable_logging(limit::LogLimit, max_disabled_level)
+    limit.max_disabled_level = max_disabled_level
+    for child in limit.children
+        disable_logging(child, max_disabled_level)
     end
 end
-
-limit_logging(level) = limit_logging(Main, level)
-limit_logging(mod::Module, level) = limit_logging(log_limiter(mod), level)
 
 
 function __init__()

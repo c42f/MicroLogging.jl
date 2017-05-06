@@ -16,6 +16,10 @@ function SimpleLogger(stream::IO; min_level=Info, interactive_style=isinteractiv
     SimpleLogger(stream, min_level, interactive_style, nothing, Dict{Symbol,Int}())
 end
 
+function enable_logging(logger::SimpleLogger, level)
+    logger.min_level = level
+end
+
 function shouldlog(logger::SimpleLogger, level, module_, filepath, line, id, max_log, progress)
     if !(logger.min_level <= level)
         return false

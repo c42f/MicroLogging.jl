@@ -1,3 +1,4 @@
+import MicroLogging: find_var_uses
 
 @testset "internal find_var_uses torture tests" begin
 

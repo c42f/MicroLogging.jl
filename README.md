@@ -34,33 +34,35 @@ using Base.Markdown
 @debug "I am an invisible debug message"
 
 @info """
-A big
-log
-message
-in a
-multiline
-string
+A big log
+message in a
+multi line string
 """
 
-@info "Non-strings are converted to strings"
+@info "Non-strings may be logged as messages:"
 @info reshape(1:16, (4,4))
 
-@info md"# Early filtering of logs per module, for efficiency"
+@info md"# Early filtering of logs, for efficiency"
 
-limit_logging(LogTest, MicroLogging.Warn)
-@info "Logging at Warn for LogTest module"
+enable_logging(MicroLogging.Info)  # Default level
+@debug begin
+    error("Should not be executed")
+    "This message is never generated"
+end
+
+disable_logging(LogTest, MicroLogging.Warn)
+@info "Disable generation for all Debug and Info messages in LogTest"
 LogTest.f(1)
 
-@info "Set all loggers to Debug level"
-limit_logging(MicroLogging.Debug)
+@info "Enable all levels globally for all modules"
+disable_logging(Main, MicroLogging.BelowMinLevel)
 LogTest.f(2)
 
 
-@info md"# Log suppression with `once` and `max_log`"
+@info md"# Log suppression with `max_log`"
 for i=1:20
     if i > 7
-        @error "i=$i out of bounds (set once=true)" once=true
-        @warn "i=$i out of bounds (set max_log=2)" max_log=2
+        @warn "i=$i out of bounds (set max_log=2)" [max_log=2]
         continue
     end
     @info "The value of (1+i) is $(1+i)"
@@ -81,27 +83,30 @@ for i=1:100
 end
 
 
-@info md"# Redirect logging to an IO stream"
-logstream = IOBuffer()
-with_logger(SimpleLogger(logstream, false)) do
-    @info "Logging redirected"
-    LogTest.f(3)
-end
-
-@info "Now directed back to stderr"
-@info """
-Contents of redirected IO stream buffer:
-................................
-$(strip(String(take!(logstream))))
-................................
-"""
-
 @info md"# Exception reporting, with backtrace"
 try
     1÷0
 catch err
     @error err
 end
+
+@info md"# Task-based log dispatch using dynamic scoping"
+logstream = IOBuffer()
+with_logger(SimpleLogger(logstream, interactive_style=false)) do
+    @info "Logging redirected"
+    LogTest.f(3)
+end
+@info """
+Logs, captured separately in the with_logger() block:
+................................
+$(strip(String(take!(logstream))))
+................................
+"""
+
+@info md"# Formatting logs can't crash the application"
+@info "The next log line will report an exception:"
+@info "1÷0 = $(1÷0)"
+@info "... see, we get to the next line without a catch"
 ```
 
 The script above produces console output like the following.  Note the
@@ -135,11 +140,11 @@ other log record metadata.
 *TODO*: can we generalize early filtering (eg, allow package-defined log
 levels) without loosing efficiency?
 
-In `MicroLogging`, early filtering can be controlled on a per-module basis
-using the `limit_logging` function:
+In `MicroLogging`, very early filtering can be controlled on a per-module basis
+using the `enable_logging` function:
 
 ```julia
-limit_logging(MyModule, MicroLogging.Info)
+enable_logging(MyModule, MicroLogging.Debug)
 ```
 
 ### Logging macros
@@ -244,3 +249,17 @@ end
 
 ... *FIXME* more to write here
 
+
+## TODO
+
+* Allow log messages to be grouped inside a module if desired
+* Consider another log level (verbose? notice?) between debug and warn, which
+  would be enabled globally but disabled in the Logger by default.
+* Consider making the first early-out a global variable, rather than module
+  specific.
+* Case study: Try replacing Base.depwarn
+* Case study: Try replacing debug logging in base/loading.jl
+* Case study: Figure out how to integrate with ProgressMeter
+  * Why not do it in the ProgressMeter frontend?  Well, then the update
+    frequency would be under module author control rather than a backend
+    property.

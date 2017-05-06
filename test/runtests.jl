@@ -1,7 +1,7 @@
 using MicroLogging
 using Base.Test
 
-import MicroLogging: LogLevel, Debug, Info, Warn, Error, find_var_uses
+import MicroLogging: BelowMinLevel, Debug, Info, Warn, Error, NoLogs
 
 if VERSION < v"0.6-"
     # Override Test.@test_broken, which is broken on julia-0.5!
@@ -48,7 +48,11 @@ Base.isempty(logger::TestLogger) = isempty(logger.records)
 
 
 function record_matches(r, ref::Tuple)
-    (r.level, r.message) == ref
+    if length(ref) == 1
+        return (r.level,) == ref
+    else
+        return (r.level, r.message) == ref
+    end
 end
 
 function record_matches(r, ref::LogRecord)
@@ -72,9 +76,9 @@ end
 #-------------------------------------------------------------------------------
 @testset "MicroLogging" begin
 
-#-------------------------------------------------------------------------------
+disable_logging(BelowMinLevel) # Set global flags to enable all logging
+
 @testset "Basic logging" begin
-    limit_logging(Debug)
     logs = collect_logs() do
         @debug "a"
         @info  "b"
@@ -86,47 +90,13 @@ end
     @test logs[3] ⊃ (Warn , "c")
     @test logs[4] ⊃ (Error, "d")
     @test length(logs) == 4
-
-    limit_logging(Info)
-    logs = collect_logs() do
-        @debug "a"
-        @info  "b"
-        @warn  "c"
-        @error "d"
-    end
-    @test logs[1] ⊃ (Info , "b")
-    @test logs[2] ⊃ (Warn , "c")
-    @test logs[3] ⊃ (Error, "d")
-    @test length(logs) == 3
-
-    limit_logging(Warn)
-    logs = collect_logs() do
-        @debug "a"
-        @info  "b"
-        @warn  "c"
-        @error "d"
-    end
-    @test logs[1] ⊃ (Warn , "c")
-    @test logs[2] ⊃ (Error, "d")
-    @test length(logs) == 2
-
-    limit_logging(Error)
-    logs = collect_logs() do
-        @debug "a"
-        @info  "b"
-        @warn  "c"
-        @error "d"
-    end
-    @test logs[1] ⊃ (Error, "d")
-    @test length(logs) == 1
 end
 
 
 #-------------------------------------------------------------------------------
-# Macro front end
+# Front end
 
 @testset "Log message formatting" begin
-    limit_logging(Info)
     logs = collect_logs() do
         # Message may be formatted any way the user pleases
         @info begin
@@ -145,7 +115,6 @@ end
 end
 
 @testset "Programmatically defined levels" begin
-    limit_logging(Info)
     logs = collect_logs() do
         for level ∈ [Info,Warn]
             @logmsg level "X"
@@ -157,11 +126,7 @@ end
     @test length(logs) == 2
 end
 
-#-------------------------------------------------------------------------------
-# Log record structure
-
 @testset "Structured logging with key value pairs" begin
-    limit_logging(Info)
     foo_val = 10
     logs = collect_logs() do
         @info "test" progress=0.1 foo=foo_val real_line=(@__LINE__)
@@ -183,9 +148,63 @@ end
     @test kwargs[:foo] == foo_val
 end
 
+@testset "Formatting exceptions are caught inside the logger" begin
+    logs = collect_logs() do
+        @info "foo $(1÷0)"
+        @info "bar"
+    end
+    @test logs[1] ⊃ (Error,)
+    @test logs[2] ⊃ (Info,"bar")
+    @test length(logs) == 2
+end
+
 
 #-------------------------------------------------------------------------------
-# Per-module log limiting
+# Early log filtering with globals
+@testset "Early log filtering" begin
+    function log_each_level()
+        collect_logs() do
+            @debug "a"
+            @info  "b"
+            @warn  "c"
+            @error "d"
+        end
+    end
+
+    disable_logging(BelowMinLevel)
+    logs = log_each_level()
+    @test logs[1] ⊃ (Debug, "a")
+    @test logs[2] ⊃ (Info , "b")
+    @test logs[3] ⊃ (Warn , "c")
+    @test logs[4] ⊃ (Error, "d")
+    @test length(logs) == 4
+
+    disable_logging(Debug)
+    logs = log_each_level()
+    @test logs[1] ⊃ (Info , "b")
+    @test logs[2] ⊃ (Warn , "c")
+    @test logs[3] ⊃ (Error, "d")
+    @test length(logs) == 3
+
+    disable_logging(Info)
+    logs = log_each_level()
+    @test logs[1] ⊃ (Warn , "c")
+    @test logs[2] ⊃ (Error, "d")
+    @test length(logs) == 2
+
+    disable_logging(Warn)
+    logs = log_each_level()
+    @test logs[1] ⊃ (Error, "d")
+    @test length(logs) == 1
+
+    disable_logging(Error)
+    logs = log_each_level()
+    @test length(logs) == 0
+
+    # Reset global flag
+    disable_logging(BelowMinLevel)
+end
+
 @eval module A
     using MicroLogging
     function a()
@@ -206,21 +225,25 @@ end
     end
 end
 
-@testset "Logger heirarchy" begin
-    limit_logging(A, Info)
-    limit_logging(A.B, Warn)
+@testset "Disabling logging with the module heirarchy" begin
+    disable_logging(A, BelowMinLevel)
+    disable_logging(A.B, Debug)
 
     logs = collect_logs() do
         A.a()
         A.B.b()
     end
 
-    @test logs[1] ⊃ LogRecord(Info , "a", A)
-    @test logs[2] ⊃ LogRecord(Warn , "a", A)
-    @test logs[3] ⊃ LogRecord(Error, "a", A)
+    @test logs[1] ⊃ LogRecord(Debug, "a", A)
+    @test logs[2] ⊃ LogRecord(Info , "a", A)
+    @test logs[3] ⊃ LogRecord(Warn , "a", A)
+    @test logs[4] ⊃ LogRecord(Error, "a", A)
 
-    @test logs[4] ⊃ LogRecord(Warn , "b", A.B)
-    @test logs[5] ⊃ LogRecord(Error, "b", A.B)
+    @test logs[5] ⊃ LogRecord(Info , "b", A.B)
+    @test logs[6] ⊃ LogRecord(Warn , "b", A.B)
+    @test logs[7] ⊃ LogRecord(Error, "b", A.B)
+
+    disable_logging(BelowMinLevel)
 end
 
 
@@ -235,17 +258,19 @@ end
         level::Int
     end
 
-    const critical = MyLevel(100)
-    const debug_verbose = MyLevel(-100)
+    const critical = MyLevel(10000)
+    const debug_verbose = MyLevel(-10000)
 
-    MicroLogging.shouldlog(lg::MicroLogging.LogLimit, l2::MyLevel) = Int(lg.min_level) <= l2.level
+    MicroLogging.shouldlog(lg::MicroLogging.LogLimit, l2::MyLevel) = l2.level > Int(lg.max_disabled_level)
 end
 
 @testset "Custom log levels" begin
+    disable_logging(Info)
     logs = collect_logs() do
         @logmsg LogLevelTest.critical "blah"
         @logmsg LogLevelTest.debug_verbose "blah"
     end
+    disable_logging(BelowMinLevel)
 
     @test logs[1] ⊃ (LogLevelTest.critical, "blah")
     @test length(logs) == 1
@@ -255,5 +280,7 @@ end
 #-------------------------------------------------------------------------------
 
 include("util.jl")
+
+disable_logging(Debug) # Reset to default
 
 end
