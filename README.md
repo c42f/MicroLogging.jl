@@ -4,9 +4,13 @@
 
 [![codecov.io](http://codecov.io/github/c42f/MicroLogging.jl/coverage.svg?branch=master)](http://codecov.io/github/c42f/MicroLogging.jl?branch=master)
 
-A prototype for a new logging interface for `Base` in julia-0.7.  For design
-discussion see the Julep - https://github.com/JuliaLang/Juleps/pull/30/files
+MicroLogging is a prototype for a new logging interface for `Base` in julia-0.7.
+For design discussion see the Julep -
+https://github.com/JuliaLang/Juleps/pull/30/files
 
+Logging should be useful and pleasant for the average package developer, but
+should meet the efficiency and flexibility demands of production deployment.
+`MicroLogging` sets out to achieve both of these things in one interface.
 
 ## Quickstart
 
