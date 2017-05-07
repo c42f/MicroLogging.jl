@@ -1,7 +1,7 @@
 using MicroLogging
 using Base.Test
 
-import MicroLogging: BelowMinLevel, Debug, Info, Warn, Error, NoLogs
+import MicroLogging: LogLevel, BelowMinLevel, Debug, Info, Warn, Error, NoLogs
 
 if VERSION < v"0.6-"
     # Override Test.@test_broken, which is broken on julia-0.5!
@@ -28,24 +28,24 @@ LogRecord(level, msg, module_=nothing, filepath=nothing, line=nothing, id=nothin
 
 type TestLogger
     records::Vector{LogRecord}
+    min_level::LogLevel
 end
 
-TestLogger() = TestLogger(LogRecord[])
+TestLogger(min_level=BelowMinLevel) = TestLogger(LogRecord[], min_level)
+
+function MicroLogging.shouldlog(logger::TestLogger, level, module_, filepath, line, id, max_log, progress)
+    level >= logger.min_level
+end
 
 function MicroLogging.logmsg(logger::TestLogger, level, msg, module_, filepath, line, id; kwargs...)
     push!(logger.records, LogRecord(level, msg, module_, filepath, line, id, kwargs))
 end
 
-function collect_logs(f::Function)
-    logger = TestLogger()
+function collect_logs(f::Function, min_level=BelowMinLevel)
+    logger = TestLogger(min_level)
     with_logger(f, logger)
     logger.records
 end
-
-getlog!(logger::TestLogger) = shift!(logger.records)
-
-Base.isempty(logger::TestLogger) = isempty(logger.records)
-
 
 function record_matches(r, ref::Tuple)
     if length(ref) == 1
@@ -75,8 +75,6 @@ end
 #-------------------------------------------------------------------------------
 #-------------------------------------------------------------------------------
 @testset "MicroLogging" begin
-
-disable_logging(BelowMinLevel) # Set global flags to enable all logging
 
 @testset "Basic logging" begin
     logs = collect_logs() do
@@ -160,7 +158,7 @@ end
 
 
 #-------------------------------------------------------------------------------
-# Early log filtering with globals
+# Very early task-global log filtering via disable_logging()
 @testset "Early log filtering" begin
     function log_each_level()
         collect_logs() do
@@ -201,7 +199,7 @@ end
     logs = log_each_level()
     @test length(logs) == 0
 
-    # Reset global flag
+    # Reset to default
     disable_logging(BelowMinLevel)
 end
 
@@ -226,23 +224,27 @@ end
 end
 
 @testset "Disabling logging with the module heirarchy" begin
-    disable_logging(A, BelowMinLevel)
-    disable_logging(A.B, Debug)
-
     logs = collect_logs() do
+        disable_logging(A, Info)
+        A.a()
+        A.B.b()
+        disable_logging(A.B, Warn)
         A.a()
         A.B.b()
     end
 
-    @test logs[1] ⊃ LogRecord(Debug, "a", A)
-    @test logs[2] ⊃ LogRecord(Info , "a", A)
-    @test logs[3] ⊃ LogRecord(Warn , "a", A)
-    @test logs[4] ⊃ LogRecord(Error, "a", A)
+    @test logs[1] ⊃ LogRecord(Warn , "a", A)
+    @test logs[2] ⊃ LogRecord(Error, "a", A)
+    @test logs[3] ⊃ LogRecord(Warn , "b", A.B)
+    @test logs[4] ⊃ LogRecord(Error, "b", A.B)
 
-    @test logs[5] ⊃ LogRecord(Info , "b", A.B)
-    @test logs[6] ⊃ LogRecord(Warn , "b", A.B)
+    @test logs[5] ⊃ LogRecord(Warn , "a", A)
+    @test logs[6] ⊃ LogRecord(Error, "a", A)
     @test logs[7] ⊃ LogRecord(Error, "b", A.B)
 
+    @test length(logs) == 7
+
+    # Reset to default
     disable_logging(BelowMinLevel)
 end
 
@@ -261,16 +263,17 @@ end
     const critical = MyLevel(10000)
     const debug_verbose = MyLevel(-10000)
 
-    MicroLogging.shouldlog(lg::MicroLogging.LogLimit, l2::MyLevel) = l2.level > Int(lg.max_disabled_level)
+    # FIXME - should remove the need to mention LogLimit here.
+    MicroLogging.shouldlog(lg::MicroLogging.LogLimit, l2::MyLevel) = Int(lg.max_disabled_level) < l2.level
+    # Following needed for use in shouldlog(::TestLogger, ...)
+    Base.:<(l1::MyLevel, l2::MicroLogging.LogLevel) = l1.level < Int(l2)
 end
 
 @testset "Custom log levels" begin
-    disable_logging(Info)
-    logs = collect_logs() do
+    logs = collect_logs(Info) do
         @logmsg LogLevelTest.critical "blah"
         @logmsg LogLevelTest.debug_verbose "blah"
     end
-    disable_logging(BelowMinLevel)
 
     @test logs[1] ⊃ (LogLevelTest.critical, "blah")
     @test length(logs) == 1
@@ -280,7 +283,5 @@ end
 #-------------------------------------------------------------------------------
 
 include("util.jl")
-
-disable_logging(Debug) # Reset to default
 
 end

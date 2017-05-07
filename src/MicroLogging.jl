@@ -75,7 +75,7 @@ filtering before the `message` expression is evaluated.
 
 @debug begin
     sA = sum(A)
-    "sum(A) = \$sA is an expensive operation, evaluated only when `shouldlog()` returns true"
+    "sum(A) = \$sA is an expensive operation, evaluated only when `shouldlog` returns true"
 end
 
 for i=1:10000
@@ -180,11 +180,6 @@ location (`module_`,`filepath`,`line`) with unique log identifier `id`.
 Additional log control hints supplied at the log site are `max_log` and
 `progress` (see `@logmsg`), which are passed in here to allow for efficient log
 filtering.
-
-    shouldlog(module_limit::LogLimit, level)
-
-Determine whether messages of severity `level` should be generated according to
-`module_limit`.
 """
 function shouldlog(logger, level, module_, filepath, line, id, max_log, progress)
     true
@@ -276,7 +271,6 @@ LogLimit(level::LogLevel)  = LogLimit(level, Vector{LogLimit}())
 
 Base.push!(parent::LogLimit, child) = push!(parent.children, child)
 
-shouldlog(limit::LogLimit, level) = level > limit.max_disabled_level
 
 const _registered_limiters = Dict{Module,LogLimit}() # See __init__
 
@@ -317,6 +311,21 @@ function disable_logging(limit::LogLimit, max_disabled_level)
         disable_logging(child, max_disabled_level)
     end
 end
+
+# FIXME: The following could do with rethinking.  Ideally we'd have both a
+# single function `shouldlog`, and users shouldn't need to know about
+# the existence of `LogLimit`.
+#
+# Base.:<(level::LogLevel, other_level) = Base.:<(convert(Int, level), convert(Int,other_level))
+# Base.:<(other_level, level::LogLevel) = Base.:<(convert(Int, level), convert(Int,other_level))
+"""
+    shouldlog(limit::LogLimit, message_level)
+
+Determine whether a message of severity `message_level` should be logged
+according to `limit`.  You should only need to override this when using custom
+log level types in `@logmsg`.
+"""
+shouldlog(limit::LogLimit, message_level) = limit.max_disabled_level < message_level
 
 
 function __init__()
