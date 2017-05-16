@@ -58,7 +58,7 @@ end
 
 function formatmsg(logger::SimpleLogger, io, ex_msg::Exception)
     bt = catch_backtrace()
-    showerror(io, ex_msg, bt; backtrace=(bt!=nothing))
+    showerror(io, ex_msg, bt; backtrace=!isempty(bt))
 end
 
 function formatmsg(logger::SimpleLogger, io, msg::Tuple)
