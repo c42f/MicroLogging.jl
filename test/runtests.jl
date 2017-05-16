@@ -156,6 +156,17 @@ end
     @test length(logs) == 2
 end
 
+@testset "Special keywords" begin
+    logs = collect_logs() do
+        @info "foo" id=:asdf
+    end
+    @test length(logs) == 1
+    record = logs[1]
+    @test record.id == :asdf
+    # TODO: More testing here, for interaction of special keywords with the
+    # shouldlog() function.
+end
+
 
 #-------------------------------------------------------------------------------
 # Very early task-global log filtering via disable_logging()

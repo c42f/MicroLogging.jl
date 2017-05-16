@@ -56,14 +56,12 @@ values which will be interpreted in a special way:
   * `progress=fraction` should be used to indicate progress through an
     algorithmic step named by `message`, it should be a value in the interval
     [0,1], and would generally be used to drive a progress bar or meter.
+  * `max_log=integer` should be used as a hint to the backend that the message
+    should be displayed no more than `max_log` times.
+  * `id=:symbol` can be used to override the unique message identifier.  This
+    is useful if you need to very closely associate messages generated in
+    different invocations of `@logmsg`.
 
-
-For extra control, `log_control_hints` is an optional expression containing key
-value pairs enclosed in square brackets.  These are eagerly evaluated and
-passed as keyword arguments to the `shouldlog()` function to perform early
-filtering before the `message` expression is evaluated.
-
-    [hint_key=value ...]
 
 # Examples
 
@@ -79,7 +77,7 @@ filtering before the `message` expression is evaluated.
 end
 
 for i=1:10000
-    @info "With the default log filter, you will only see (i = \$i) ten times"  [max_log=10]
+    @info "With the default backend, you will only see (i = \$i) ten times"  max_log=10
     @debug "Algorithm1" progress=i/10000
 end
 
@@ -91,11 +89,16 @@ level = Info
 macro logmsg(level, message, exs...)
     progress = nothing
     max_log = nothing
+    id = nothing
     kwargs = Any[]
     closure_vars = find_var_uses(message, exs...)
     for ex in exs
         if !isa(ex,Expr)
             throw(ArgumentError("Expected key value pair, got $ex"))
+        #=
+        # FIXME - decide whether this special syntax is a good idea.
+        # It's probably only a good idea if we decide to pass these as keyword
+        # arguments to shouldlog()
         elseif ex.head == :vect
             # Match "log control" keyword argument syntax, eg
             # @info "Foo" [once=true]
@@ -106,6 +109,11 @@ macro logmsg(level, message, exs...)
                 k,v = keyval.args
                 if k == :max_log
                     max_log = v
+                elseif k == :id
+                    if !isa(v, Symbol)
+                        throw(ArgumentError("id should be a symbol"))
+                    end
+                    id = Expr(:quote, v)
                 elseif k == :progress
                     progress = v
                     push!(kwargs, Expr(:kw, k, v))
@@ -113,9 +121,35 @@ macro logmsg(level, message, exs...)
                     throw(ArgumentError("Unknown log control $k"))
                 end
             end
+        =#
         elseif ex.head == :(=) && isa(ex.args[1], Symbol)
-            # Match key value pairs for structured log records
-            push!(kwargs, Expr(:kw, ex.args[1], esc(ex.args[2])))
+            k,v = ex.args
+            k = ex.args[1]
+            # Recognize several special keyword arguments
+            if k == :id
+                if !isa(v, Expr) || v.head != :quote
+                    throw(ArgumentError("Message id should be a Symbol"))
+                end
+                # id may be overridden if you really want several log
+                # statements to share the same id (eg, several pertaining to
+                # the same progress step).
+                id = v
+            else
+                v = esc(v)
+                # The following keywords are recognized for early filtering, to
+                # throttle logging as early as possible.
+                #
+                # TODO: Decide whether passing these to shouldlog() is actually
+                # a good idea.  Keywords for this would be a lot better but the
+                # performance hit is painful.
+                if k == :max_log
+                    max_log = v
+                elseif k == :progress
+                    progress = v
+                end
+                # Copy across key value pairs for structured log records
+                push!(kwargs, Expr(:kw, k, v))
+            end
         else
             throw(ArgumentError("Expected key value pair, got $ex"))
         end
@@ -125,7 +159,10 @@ macro logmsg(level, message, exs...)
     # FIXME: The following dubious hack gives an approximate line number
     # only - the line of the start of the toplevel expression! See #1.
     lineno = Int(unsafe_load(cglobal(:jl_lineno, Cint)))
-    id = Expr(:quote, gensym())
+    if id == nothing
+        # User didn't override the id - generate a unique message id.
+        id = Expr(:quote, gensym())
+    end
     level = esc(level)
     quote
         loglimit = $loglimit

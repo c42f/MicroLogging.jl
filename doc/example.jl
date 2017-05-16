@@ -31,7 +31,7 @@ enable_logging(MicroLogging.Debug)
 @info md"# Log suppression with `max_log`"
 for i=1:20
     if i > 7
-        @warn "i=$i out of bounds (set max_log=2)" [max_log=2]
+        @warn "i=$i out of bounds (set max_log=2)" max_log=2
         continue
     end
     @info "The value of (1+i) is $(1+i)"
