@@ -3,6 +3,7 @@ __precompile__()
 module MicroLogging
 
 using Compat
+using FastClosures
 
 export
     # Frontend
@@ -26,7 +27,6 @@ any work is done formatting the log message and other metadata.
 
 
 include("handlers.jl")
-include("util.jl")
 
 
 #-------------------------------------------------------------------------------
@@ -84,14 +84,12 @@ end
 level = Info
 @logmsg level "Some message with" a=1 b=2
 ```
-
 """
 macro logmsg(level, message, exs...)
     progress = nothing
     max_log = nothing
     id = nothing
     kwargs = Any[]
-    closure_vars = find_var_uses(message, exs...)
     for ex in exs
         if !isa(ex,Expr)
             throw(ArgumentError("Expected key value pair, got $ex"))
@@ -174,12 +172,9 @@ macro logmsg(level, message, exs...)
                 # Bind log message generation into a closure, allowing us to defer
                 # creation and formatting of messages until after filtering.
                 #
-                # The odd looking let block is a workaround for the performance
-                # gotach in https://github.com/JuliaLang/julia/issues/15276
-                create_msg = let $([:($(esc(v))=$(esc(v))) for v in closure_vars]...)
-                    (logger, level, module_, filepath, line, id) ->
+                # Use FastClosures.@closure to work around https://github.com/JuliaLang/julia/issues/15276
+                create_msg = @closure (logger, level, module_, filepath, line, id) ->
                         logmsg(logger, level, $(esc(message)), module_, filepath, line, id; $(kwargs...))
-                end
                 dispatchmsg(logger, $level, $module_, @__FILE__, $lineno, $id, create_msg)
             end
         end
