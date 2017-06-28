@@ -27,6 +27,7 @@ any work is done formatting the log message and other metadata.
 
 
 include("handlers.jl")
+include("util.jl")
 
 
 #-------------------------------------------------------------------------------
