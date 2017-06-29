@@ -159,7 +159,8 @@ macro logmsg(level, message, exs...)
             throw(ArgumentError("Expected key value pair, got $ex"))
         end
     end
-    module_ = current_module()
+    module_ = @static Compat.macros_have_sourceloc ?
+              __module__ : current_module()
     loglimit = log_limiter(module_)
     if line == nothing
         line = @static Compat.macros_have_sourceloc ?
@@ -309,7 +310,7 @@ current_logger() = get(task_local_storage(), :CURRENT_LOGGER, _global_logger)
 #-------------------------------------------------------------------------------
 # Basic log control and per-module log limiting machinery
 
-type LogLimit
+mutable struct LogLimit
     max_disabled_level::LogLevel
     children::Vector{LogLimit}
 end

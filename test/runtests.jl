@@ -13,7 +13,7 @@ end
 
 # Test helpers
 
-type LogRecord
+mutable struct LogRecord
     level
     message
     module_
@@ -26,7 +26,7 @@ end
 LogRecord(args...; kwargs...) = LogRecord(args..., kwargs)
 LogRecord(level, msg, module_=nothing, filepath=nothing, line=nothing, id=nothing; kwargs...) = LogRecord(level, msg, module_, filepath, line, id, kwargs)
 
-type TestLogger
+mutable struct TestLogger
     records::Vector{LogRecord}
     min_level::LogLevel
 end
@@ -269,7 +269,7 @@ end
 @eval module LogLevelTest
     using MicroLogging
 
-    immutable MyLevel
+    struct MyLevel
         level::Int
     end
 

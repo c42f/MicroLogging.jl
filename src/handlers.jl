@@ -4,7 +4,7 @@
 Simplistic logger for logging to a terminal or noninteractive stream, with
 basic per-level color support.
 """
-type SimpleLogger
+mutable struct SimpleLogger
     stream::IO
     min_level::LogLevel
     interactive_style::Bool
