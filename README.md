@@ -12,6 +12,13 @@ Logging should be useful and pleasant for the average package developer, but
 should meet the efficiency and flexibility demands of production deployment.
 `MicroLogging` sets out to achieve both of these things in one interface.
 
+## Install
+
+```julia
+Pkg.clone("git@github.com:c42f/FastClosures.jl.git")
+Pkg.clone("git@github.com:c42f/MicroLogging.jl.git")
+```
+
 ## Quickstart
 
 ```julia
