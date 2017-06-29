@@ -138,7 +138,9 @@ end
     # Builtin metadata
     @test record.module_ == Main
     @test record.filepath == Base.source_path()
-    @test_broken record.line == kwargs[:real_line] # See #1
+    if Compat.macros_have_sourceloc # See #1
+        @test record.line == kwargs[:real_line]
+    end
     @test isa(record.id, Symbol)
 
     # User-defined metadata

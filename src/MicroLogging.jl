@@ -90,6 +90,8 @@ macro logmsg(level, message, exs...)
     progress = nothing
     max_log = nothing
     id = nothing
+    line = nothing
+    file = nothing
     kwargs = Any[]
     for ex in exs
         if !isa(ex,Expr)
@@ -133,6 +135,10 @@ macro logmsg(level, message, exs...)
                 # statements to share the same id (eg, several pertaining to
                 # the same progress step).
                 id = v
+            elseif k == :line
+                line = esc(v)
+            elseif k == :file
+                file = esc(v)
             else
                 v = esc(v)
                 # The following keywords are recognized for early filtering, to
@@ -155,38 +161,47 @@ macro logmsg(level, message, exs...)
     end
     module_ = current_module()
     loglimit = log_limiter(module_)
-    # FIXME: The following dubious hack gives an approximate line number
-    # only - the line of the start of the toplevel expression! See #1.
-    lineno = Int(unsafe_load(cglobal(:jl_lineno, Cint)))
+    if line == nothing
+        line = @static Compat.macros_have_sourceloc ?
+               :(@__LINE__) :
+               # For julia-0.6 and below, the above doesn't work, and the
+               # following dubious hack gives an approximate line number only
+               # - the line of the start of the current toplevel expression!
+               # See #1.
+               Int(unsafe_load(cglobal(:jl_lineno, Cint)))
+    end
+    if file == nothing
+        file = :(@__FILE__)
+    end
     if id == nothing
         # User didn't override the id - generate a unique message id.
         id = Expr(:quote, gensym())
     end
     level = esc(level)
-    quote
+    @propagate_sourceloc quote
         loglimit = $loglimit
         if shouldlog(loglimit, $level)
             logger = current_logger()
             # Second chance at an early bail-out, based on arbitrary
             # logger-specific logic.
-            if shouldlog(logger, $level, $module_, @__FILE__, $lineno, $id, $max_log, $progress)
+            if shouldlog(logger, $level, $module_, $file, $line, $id, $max_log, $progress)
                 # Bind log message generation into a closure, allowing us to defer
                 # creation and formatting of messages until after filtering.
                 #
                 # Use FastClosures.@closure to work around https://github.com/JuliaLang/julia/issues/15276
                 create_msg = @closure (logger, level, module_, filepath, line, id) ->
                         logmsg(logger, level, $(esc(message)), module_, filepath, line, id; $(kwargs...))
-                dispatchmsg(logger, $level, $module_, @__FILE__, $lineno, $id, create_msg)
+                dispatchmsg(logger, $level, $module_, $file, $line, $id, create_msg)
             end
         end
         nothing
     end
 end
 
-macro debug(message, exs...)  :(@logmsg Debug $(esc(message)) $(map(esc, exs)...))  end
-macro  info(message, exs...)  :(@logmsg Info  $(esc(message)) $(map(esc, exs)...))  end
-macro  warn(message, exs...)  :(@logmsg Warn  $(esc(message)) $(map(esc, exs)...))  end
-macro error(message, exs...)  :(@logmsg Error $(esc(message)) $(map(esc, exs)...))  end
+macro debug(message, exs...)  @propagate_sourceloc(:(@logmsg Debug $(esc(message)) $(map(esc, exs)...))) end
+macro  info(message, exs...)  @propagate_sourceloc(:(@logmsg Info  $(esc(message)) $(map(esc, exs)...))) end
+macro  warn(message, exs...)  @propagate_sourceloc(:(@logmsg Warn  $(esc(message)) $(map(esc, exs)...))) end
+macro error(message, exs...)  @propagate_sourceloc(:(@logmsg Error $(esc(message)) $(map(esc, exs)...))) end
 
 @eval @doc $(@doc @logmsg) $(Symbol("@debug"))
 @eval @doc $(@doc @logmsg) $(Symbol("@info"))
