@@ -126,8 +126,9 @@ end
 
 @testset "Structured logging with key value pairs" begin
     foo_val = 10
+    bar_val = 100
     logs = collect_logs() do
-        @info "test" progress=0.1 foo=foo_val real_line=(@__LINE__)
+        @info "test"  bar_val  progress=0.1  foo=foo_val  2*3  real_line=(@__LINE__)
     end
     @test length(logs) == 1
 
@@ -144,8 +145,10 @@ end
     @test isa(record.id, Symbol)
 
     # User-defined metadata
+    @test kwargs[:bar_val] === bar_val
     @test kwargs[:progress] == 0.1
-    @test kwargs[:foo] == foo_val
+    @test kwargs[:foo] === foo_val
+    @test kwargs[Symbol(:(2*3))] === 6
 end
 
 @testset "Formatting exceptions are caught inside the logger" begin
