@@ -126,7 +126,11 @@ function logmsg(logger::SimpleLogger, level, msg::AbstractString, module_, filep
                 print(logger.stream, "\n")
             end
             logger.prev_progress_key = nothing
-            for (i,msgline) in enumerate(split(msg, '\n'))
+            msglines = split(msg, '\n')
+            for (k,v) in kwargs
+                push!(msglines, string("  ", k, " = ", v))
+            end
+            for (i,msgline) in enumerate(msglines)
                 # TODO: This API is inconsistent between 0.5 & 0.6 - fix the bold stuff if possible.
                 print(logger.stream, msgline)
                 if i == 2

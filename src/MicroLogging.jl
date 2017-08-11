@@ -4,6 +4,7 @@ module MicroLogging
 
 using Compat
 using FastClosures
+using Base.Meta
 
 export
     # Frontend
@@ -34,12 +35,12 @@ include("util.jl")
 # Logging macros and frontend
 
 """
-      @debug message  [key=value ...]
-      @info  message  [key=value ...]
-      @warn  message  [key=value ...]
-      @error message  [key=value ...]
+    @debug message  [key=value | value ...]
+    @info  message  [key=value | value ...]
+    @warn  message  [key=value | value ...]
+    @error message  [key=value | value ...]
 
-      @logmsg level message [key=value ...]
+    @logmsg level message [key=value | value ...]
 
 Create a log record with an informational `message`.  For convenience, four
 logging macros `@debug`, `@info`, `@warn` and `@error` are defined which log at
@@ -49,10 +50,16 @@ types.
 
 `message` can be any type.  You should generally ensure that `string(message)`
 gives useful information, but custom logger backends may serialize the message
-in a more useful way in general.  The optional `key=value` pairs support
-arbitrary user defined metadata which will be passed through to the logging
-backend as part of the log record.  By convention, there are some keys and
-values which will be interpreted in a special way:
+in a more useful way in general.
+
+The optional list of `key=value` pairs supports arbitrary user defined
+metadata which will be passed through to the logging backend as part of the
+log record.  If only a `value` expression is supplied, a key will be generated
+using `Symbol`. For example, `x` becomes `x=x`, and `foo(10)` becomes
+`Symbol("foo(10)")=foo(10)`.
+
+By convention, there are some keys and values which will be interpreted in a
+special way:
 
   * `progress=fraction` should be used to indicate progress through an
     algorithmic step named by `message`, it should be a value in the interval
@@ -62,14 +69,16 @@ values which will be interpreted in a special way:
   * `id=:symbol` can be used to override the unique message identifier.  This
     is useful if you need to very closely associate messages generated in
     different invocations of `@logmsg`.
+  * `file=string` and `line=integer` can be used to override the apparent
+    source location of a log message.  Generally, this is not encouraged.
 
 
 # Examples
 
 ```
 @debug "Verbose degging information.  Invisible by default"
-@info "An informational message"
-@warn "Something was odd.  You should pay attention"
+@info  "An informational message"
+@warn  "Something was odd.  You should pay attention"
 @error "A non fatal error occurred"
 
 @debug begin
@@ -79,11 +88,12 @@ end
 
 for i=1:10000
     @info "With the default backend, you will only see (i = \$i) ten times"  max_log=10
-    @debug "Algorithm1" progress=i/10000
+    @debug "Algorithm1" i progress=i/10000
 end
 
 level = Info
-@logmsg level "Some message with" a=1 b=2
+a = 100
+@logmsg level "Some message with attached values" a foo(2)
 ```
 """
 macro logmsg(level, message, exs...)
@@ -94,37 +104,11 @@ macro logmsg(level, message, exs...)
     file = nothing
     kwargs = Any[]
     for ex in exs
-        if !isa(ex,Expr)
-            throw(ArgumentError("Expected key value pair, got $ex"))
-        #=
-        # FIXME - decide whether this special syntax is a good idea.
-        # It's probably only a good idea if we decide to pass these as keyword
-        # arguments to shouldlog()
-        elseif ex.head == :vect
-            # Match "log control" keyword argument syntax, eg
-            # @info "Foo" [once=true]
-            for keyval in ex.args
-                if !isa(keyval, Expr) || keyval.head != :(=) || !isa(keyval.args[1], Symbol)
-                    throw(ArgumentError("Expected key value pair inside log control, got $keyval"))
-                end
-                k,v = keyval.args
-                if k == :max_log
-                    max_log = v
-                elseif k == :id
-                    if !isa(v, Symbol)
-                        throw(ArgumentError("id should be a symbol"))
-                    end
-                    id = Expr(:quote, v)
-                elseif k == :progress
-                    progress = v
-                    push!(kwargs, Expr(:kw, k, v))
-                else
-                    throw(ArgumentError("Unknown log control $k"))
-                end
-            end
-        =#
-        elseif ex.head == :(=) && isa(ex.args[1], Symbol)
+        if isexpr(ex, :(=)) && isa(ex.args[1], Symbol)
             k,v = ex.args
+            if !(k isa Symbol)
+                throw(ArgumentError("Expected symbol for key in key value pair `$ex`"))
+            end
             k = ex.args[1]
             # Recognize several special keyword arguments
             if k == :id
@@ -155,8 +139,37 @@ macro logmsg(level, message, exs...)
                 # Copy across key value pairs for structured log records
                 push!(kwargs, Expr(:kw, k, v))
             end
+        #=
+        # FIXME - decide whether this special syntax is a good idea.
+        # It's probably only a good idea if we decide to pass these as keyword
+        # arguments to shouldlog()
+        elseif ex.head == :vect
+            # Match "log control" keyword argument syntax, eg
+            # @info "Foo" [once=true]
+            for keyval in ex.args
+                if !isa(keyval, Expr) || keyval.head != :(=) || !isa(keyval.args[1], Symbol)
+                    throw(ArgumentError("Expected key value pair inside log control, got $keyval"))
+                end
+                k,v = keyval.args
+                if k == :max_log
+                    max_log = v
+                elseif k == :id
+                    if !isa(v, Symbol)
+                        throw(ArgumentError("id should be a symbol"))
+                    end
+                    id = Expr(:quote, v)
+                elseif k == :progress
+                    progress = v
+                    push!(kwargs, Expr(:kw, k, v))
+                else
+                    throw(ArgumentError("Unknown log control $k"))
+                end
+            end
+        =#
         else
-            throw(ArgumentError("Expected key value pair, got $ex"))
+            # Positional arguments - will be converted to key value pairs
+            # automatically.
+            push!(kwargs, Expr(:kw, Symbol(ex), esc(ex)))
         end
     end
     module_ = @static Compat.macros_have_sourceloc ?
