@@ -28,80 +28,25 @@ any work is done formatting the log message and other metadata.
 
 
 include("handlers.jl")
-include("util.jl")
 
 
 #-------------------------------------------------------------------------------
 # Logging macros and frontend
 
-"""
-    @debug message  [key=value | value ...]
-    @info  message  [key=value | value ...]
-    @warn  message  [key=value | value ...]
-    @error message  [key=value | value ...]
-
-    @logmsg level message [key=value | value ...]
-
-Create a log record with an informational `message`.  For convenience, four
-logging macros `@debug`, `@info`, `@warn` and `@error` are defined which log at
-the standard severity levels `Debug`, `Info`, `Warn` and `Error`.  `@logmsg`
-allows `level` to be set programmatically to any `LogLevel` or custom log level
-types.
-
-`message` can be any type.  You should generally ensure that `string(message)`
-gives useful information, but custom logger backends may serialize the message
-in a more useful way in general.
-
-The optional list of `key=value` pairs supports arbitrary user defined
-metadata which will be passed through to the logging backend as part of the
-log record.  If only a `value` expression is supplied, a key will be generated
-using `Symbol`. For example, `x` becomes `x=x`, and `foo(10)` becomes
-`Symbol("foo(10)")=foo(10)`.
-
-By convention, there are some keys and values which will be interpreted in a
-special way:
-
-  * `progress=fraction` should be used to indicate progress through an
-    algorithmic step named by `message`, it should be a value in the interval
-    [0,1], and would generally be used to drive a progress bar or meter.
-  * `max_log=integer` should be used as a hint to the backend that the message
-    should be displayed no more than `max_log` times.
-  * `id=:symbol` can be used to override the unique message identifier.  This
-    is useful if you need to very closely associate messages generated in
-    different invocations of `@logmsg`.
-  * `file=string` and `line=integer` can be used to override the apparent
-    source location of a log message.  Generally, this is not encouraged.
-
-
-# Examples
-
-```
-@debug "Verbose degging information.  Invisible by default"
-@info  "An informational message"
-@warn  "Something was odd.  You should pay attention"
-@error "A non fatal error occurred"
-
-@debug begin
-    sA = sum(A)
-    "sum(A) = \$sA is an expensive operation, evaluated only when `shouldlog` returns true"
-end
-
-for i=1:10000
-    @info "With the default backend, you will only see (i = \$i) ten times"  max_log=10
-    @debug "Algorithm1" i progress=i/10000
-end
-
-level = Info
-a = 100
-@logmsg level "Some message with attached values" a foo(2)
-```
-"""
-macro logmsg(level, message, exs...)
+# Generate code for @logmsg
+function logmsg_code(module_, level, message, exs...)
     progress = nothing
     max_log = nothing
-    id = nothing
-    line = nothing
-    file = nothing
+    # Generate a unique message id by default
+    id = Expr(:quote, gensym())
+    file = :(@__FILE__)
+    line = @static Compat.macros_have_sourceloc ?
+           :(@__LINE__) :
+           # For julia-0.6 and below, the above doesn't work, and the
+           # following dubious hack gives an approximate line number only
+           # - the line of the start of the current toplevel expression!
+           # See #1.
+           Int(unsafe_load(cglobal(:jl_lineno, Cint)))
     kwargs = Any[]
     for ex in exs
         if isexpr(ex, :(=)) && isa(ex.args[1], Symbol)
@@ -172,27 +117,8 @@ macro logmsg(level, message, exs...)
             push!(kwargs, Expr(:kw, Symbol(ex), esc(ex)))
         end
     end
-    module_ = @static Compat.macros_have_sourceloc ?
-              __module__ : current_module()
     loglimit = log_limiter(module_)
-    if line == nothing
-        line = @static Compat.macros_have_sourceloc ?
-               :(@__LINE__) :
-               # For julia-0.6 and below, the above doesn't work, and the
-               # following dubious hack gives an approximate line number only
-               # - the line of the start of the current toplevel expression!
-               # See #1.
-               Int(unsafe_load(cglobal(:jl_lineno, Cint)))
-    end
-    if file == nothing
-        file = :(@__FILE__)
-    end
-    if id == nothing
-        # User didn't override the id - generate a unique message id.
-        id = Expr(:quote, gensym())
-    end
-    level = esc(level)
-    @propagate_sourceloc quote
+    quote
         loglimit = $loglimit
         if shouldlog(loglimit, $level)
             logger = current_logger()
@@ -212,10 +138,76 @@ macro logmsg(level, message, exs...)
     end
 end
 
-macro debug(message, exs...)  @propagate_sourceloc(:(@logmsg Debug $(esc(message)) $(map(esc, exs)...))) end
-macro  info(message, exs...)  @propagate_sourceloc(:(@logmsg Info  $(esc(message)) $(map(esc, exs)...))) end
-macro  warn(message, exs...)  @propagate_sourceloc(:(@logmsg Warn  $(esc(message)) $(map(esc, exs)...))) end
-macro error(message, exs...)  @propagate_sourceloc(:(@logmsg Error $(esc(message)) $(map(esc, exs)...))) end
+
+
+"""
+    @debug message  [key=value | value ...]
+    @info  message  [key=value | value ...]
+    @warn  message  [key=value | value ...]
+    @error message  [key=value | value ...]
+
+    @logmsg level message [key=value | value ...]
+
+Create a log record with an informational `message`.  For convenience, four
+logging macros `@debug`, `@info`, `@warn` and `@error` are defined which log at
+the standard severity levels `Debug`, `Info`, `Warn` and `Error`.  `@logmsg`
+allows `level` to be set programmatically to any `LogLevel` or custom log level
+types.
+
+`message` can be any type.  You should generally ensure that `string(message)`
+gives useful information, but custom logger backends may serialize the message
+in a more useful way in general.
+
+The optional list of `key=value` pairs supports arbitrary user defined
+metadata which will be passed through to the logging backend as part of the
+log record.  If only a `value` expression is supplied, a key will be generated
+using `Symbol`. For example, `x` becomes `x=x`, and `foo(10)` becomes
+`Symbol("foo(10)")=foo(10)`.
+
+By convention, there are some keys and values which will be interpreted in a
+special way:
+
+  * `progress=fraction` should be used to indicate progress through an
+    algorithmic step named by `message`, it should be a value in the interval
+    [0,1], and would generally be used to drive a progress bar or meter.
+  * `max_log=integer` should be used as a hint to the backend that the message
+    should be displayed no more than `max_log` times.
+  * `id=:symbol` can be used to override the unique message identifier.  This
+    is useful if you need to very closely associate messages generated in
+    different invocations of `@logmsg`.
+  * `file=string` and `line=integer` can be used to override the apparent
+    source location of a log message.  Generally, this is not encouraged.
+
+
+# Examples
+
+```
+@debug "Verbose degging information.  Invisible by default"
+@info  "An informational message"
+@warn  "Something was odd.  You should pay attention"
+@error "A non fatal error occurred"
+
+@debug begin
+    sA = sum(A)
+    "sum(A) = \$sA is an expensive operation, evaluated only when `shouldlog` returns true"
+end
+
+for i=1:10000
+    @info "With the default backend, you will only see (i = \$i) ten times"  max_log=10
+    @debug "Algorithm1" i progress=i/10000
+end
+
+level = Info
+a = 100
+@logmsg level "Some message with attached values" a foo(2)
+```
+"""
+macro logmsg(level, message, exs...) logmsg_code(Compat.macros_have_sourceloc ? __module__ : current_module(), esc(level), message, exs...) end
+
+macro debug(message, exs...) logmsg_code(Compat.macros_have_sourceloc ? __module__ : current_module(), :Debug, message, exs...) end
+macro  info(message, exs...) logmsg_code(Compat.macros_have_sourceloc ? __module__ : current_module(), :Info,  message, exs...) end
+macro  warn(message, exs...) logmsg_code(Compat.macros_have_sourceloc ? __module__ : current_module(), :Warn,  message, exs...) end
+macro error(message, exs...) logmsg_code(Compat.macros_have_sourceloc ? __module__ : current_module(), :Error, message, exs...) end
 
 @eval @doc $(@doc @logmsg) $(Symbol("@debug"))
 @eval @doc $(@doc @logmsg) $(Symbol("@info"))
