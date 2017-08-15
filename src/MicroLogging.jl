@@ -34,19 +34,11 @@ include("handlers.jl")
 # Logging macros and frontend
 
 # Generate code for @logmsg
-function logmsg_code(module_, level, message, exs...)
+function logmsg_code(module_, file, line, level, message, exs...)
     progress = nothing
     max_log = nothing
     # Generate a unique message id by default
     id = Expr(:quote, gensym())
-    file = :(@__FILE__)
-    line = @static Compat.macros_have_sourceloc ?
-           :(@__LINE__) :
-           # For julia-0.6 and below, the above doesn't work, and the
-           # following dubious hack gives an approximate line number only
-           # - the line of the start of the current toplevel expression!
-           # See #1.
-           Int(unsafe_load(cglobal(:jl_lineno, Cint)))
     kwargs = Any[]
     for ex in exs
         if isexpr(ex, :(=)) && isa(ex.args[1], Symbol)
@@ -138,6 +130,26 @@ function logmsg_code(module_, level, message, exs...)
     end
 end
 
+# Get (macro,file,line) for the location of the caller of a macro.  Designed to
+# be used from within the body of a macro.
+macro sourceinfo()
+    @static if Compat.macros_have_sourceloc
+        esc(quote
+            (__module__,
+             __source__.file == nothing ? nothing : String(__source__.file),
+             __source__.line)
+        end)
+    else
+        # For julia-0.6 and below, the above doesn't work, and the
+        # following dubious hack gives an approximate line number only
+        # - the line of the start of the current toplevel expression!
+        # See #1.
+        line = Int(unsafe_load(cglobal(:jl_lineno, Cint)))
+        esc(quote
+            (current_module(), :(@__FILE__), $line)
+        end)
+    end
+end
 
 
 """
@@ -202,12 +214,12 @@ a = 100
 @logmsg level "Some message with attached values" a foo(2)
 ```
 """
-macro logmsg(level, message, exs...) logmsg_code(Compat.macros_have_sourceloc ? __module__ : current_module(), esc(level), message, exs...) end
+macro logmsg(level, message, exs...) logmsg_code((@sourceinfo)..., esc(level), message, exs...) end
 
-macro debug(message, exs...) logmsg_code(Compat.macros_have_sourceloc ? __module__ : current_module(), :Debug, message, exs...) end
-macro  info(message, exs...) logmsg_code(Compat.macros_have_sourceloc ? __module__ : current_module(), :Info,  message, exs...) end
-macro  warn(message, exs...) logmsg_code(Compat.macros_have_sourceloc ? __module__ : current_module(), :Warn,  message, exs...) end
-macro error(message, exs...) logmsg_code(Compat.macros_have_sourceloc ? __module__ : current_module(), :Error, message, exs...) end
+macro debug(message, exs...) logmsg_code((@sourceinfo)..., :Debug, message, exs...) end
+macro  info(message, exs...) logmsg_code((@sourceinfo)..., :Info,  message, exs...) end
+macro  warn(message, exs...) logmsg_code((@sourceinfo)..., :Warn,  message, exs...) end
+macro error(message, exs...) logmsg_code((@sourceinfo)..., :Error, message, exs...) end
 
 @eval @doc $(@doc @logmsg) $(Symbol("@debug"))
 @eval @doc $(@doc @logmsg) $(Symbol("@info"))
@@ -240,7 +252,7 @@ function shouldlog(logger, level, module_, filepath, line, id, max_log, progress
 end
 
 
-function dispatchmsg(logger, level, module_, filepath, line, id, create_msg::ANY)
+function dispatchmsg(logger, level, module_, filepath, line, id, create_msg)
     # Catch all exceptions, to prevent log message generation from crashing
     # the program.  This lets users confidently toggle little-used
     # functionality - such as debug logging - in a production system.
