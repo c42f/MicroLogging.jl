@@ -144,9 +144,10 @@ macro sourceinfo()
         # following dubious hack gives an approximate line number only
         # - the line of the start of the current toplevel expression!
         # See #1.
-        line = Int(unsafe_load(cglobal(:jl_lineno, Cint)))
         esc(quote
-            (current_module(), :(@__FILE__), $line)
+            (current_module(),
+             :(@__FILE__),
+             Int(unsafe_load(cglobal(:jl_lineno, Cint))))
         end)
     end
 end
