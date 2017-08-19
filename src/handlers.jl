@@ -114,7 +114,7 @@ end
 function logmsg(logger::SimpleLogger, level, msg::AbstractString, module_, filepath, line, id;
                 progress=nothing, kwargs...)
     # Log printing
-    filename = filepath === nothing ? "REPL" : basename(filepath)
+    filename = basename(filepath)
     if logger.interactive_style
         color, bold, levelstr = levelstyle(level)
         # Attempt at avoiding the problem of distracting metadata in info log

@@ -130,13 +130,13 @@ function logmsg_code(module_, file, line, level, message, exs...)
     end
 end
 
-# Get (module,file,line) for the location of the caller of a macro.
+# Get (module,filepath,line) for the location of the caller of a macro.
 # Designed to be used from within the body of a macro.
 macro sourceinfo()
     @static if Compat.macros_have_sourceloc
         esc(quote
             (__module__,
-             __source__.file == nothing ? nothing : String(__source__.file),
+             __source__.file == nothing ? "?" : String(__source__.file),
              __source__.line)
         end)
     else
@@ -146,7 +146,7 @@ macro sourceinfo()
         # See #1.
         esc(quote
             (current_module(),
-             :(@__FILE__),
+             (p = Base.source_path(); p == nothing ? "REPL" : p),
              Int(unsafe_load(cglobal(:jl_lineno, Cint))))
         end)
     end
