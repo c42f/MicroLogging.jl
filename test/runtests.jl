@@ -174,7 +174,7 @@ end
 
 
 #-------------------------------------------------------------------------------
-# Very early task-global log filtering via disable_logging()
+# Very early global log filtering via disable_logging()
 @testset "Early log filtering" begin
     function log_each_level()
         collect_logs() do
@@ -222,46 +222,26 @@ end
 @eval module A
     using MicroLogging
     function a()
-        @debug "a"
         @info  "a"
-        @warn  "a"
-        @error "a"
     end
 
     module B
         using MicroLogging
         function b()
-            @debug "b"
             @info  "b"
-            @warn  "b"
-            @error "b"
         end
     end
 end
 
-@testset "Disabling logging with the module heirarchy" begin
+@testset "Capture of module information" begin
     logs = collect_logs() do
-        disable_logging(A, Info)
-        A.a()
-        A.B.b()
-        disable_logging(A.B, Warn)
         A.a()
         A.B.b()
     end
 
-    @test logs[1] ⊃ LogRecord(Warn , "a", A)
-    @test logs[2] ⊃ LogRecord(Error, "a", A)
-    @test logs[3] ⊃ LogRecord(Warn , "b", A.B)
-    @test logs[4] ⊃ LogRecord(Error, "b", A.B)
-
-    @test logs[5] ⊃ LogRecord(Warn , "a", A)
-    @test logs[6] ⊃ LogRecord(Error, "a", A)
-    @test logs[7] ⊃ LogRecord(Error, "b", A.B)
-
-    @test length(logs) == 7
-
-    # Reset to default
-    disable_logging(BelowMinLevel)
+    @test logs[1] ⊃ LogRecord(Info, "a", A)
+    @test logs[2] ⊃ LogRecord(Info, "b", A.B)
+    @test length(logs) == 2
 end
 
 
@@ -279,10 +259,8 @@ end
     const critical = MyLevel(10000)
     const debug_verbose = MyLevel(-10000)
 
-    # FIXME - should remove the need to mention LogLimit here.
-    MicroLogging.shouldlog(lg::MicroLogging.LogLimit, l2::MyLevel) = Int(lg.max_disabled_level) < l2.level
-    # Following needed for use in shouldlog(::TestLogger, ...)
     Base.:<(l1::MyLevel, l2::MicroLogging.LogLevel) = l1.level < Int(l2)
+    Base.:<(l1::MicroLogging.LogLevel, l2::MyLevel) = Int(l1) < l2.level
 end
 
 @testset "Custom log levels" begin

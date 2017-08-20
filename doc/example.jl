@@ -84,9 +84,9 @@ function f(x)
     @error "a LogTest module error message $x"
 end
 end
-disable_logging(LogTest, MicroLogging.Info)
-@info "Disable generation for all Info and Debug in LogTest"
+disable_logging(MicroLogging.Info)
+@info "Disable log generation for all Info and Debug"
 LogTest.f(1)
-@info "Enable all levels globally for all modules (the default)"
+@info "Disable no levels (the default)"
 disable_logging(Main, MicroLogging.BelowMinLevel)
 LogTest.f(2)

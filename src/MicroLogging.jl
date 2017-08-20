@@ -26,6 +26,7 @@ any work is done formatting the log message and other metadata.
 """
 @enum LogLevel BelowMinLevel=typemin(Int32) Debug=-1000 Info=0 Warn=1000 Error=2000 NoLogs=typemax(Int32)
 
+const _max_disabled_level = Ref(BelowMinLevel)
 
 include("handlers.jl")
 
@@ -109,10 +110,8 @@ function logmsg_code(module_, file, line, level, message, exs...)
             push!(kwargs, Expr(:kw, Symbol(ex), esc(ex)))
         end
     end
-    loglimit = log_limiter(module_)
     quote
-        loglimit = $loglimit
-        if shouldlog(loglimit, $level)
+        if _max_disabled_level[] < $level
             logger = current_logger()
             # Second chance at an early bail-out, based on arbitrary
             # logger-specific logic.
@@ -339,20 +338,6 @@ LogLimit(level::LogLevel)  = LogLimit(level, Vector{LogLimit}())
 Base.push!(parent::LogLimit, child) = push!(parent.children, child)
 
 
-const _registered_limiters = Dict{Module,LogLimit}() # See __init__
-
-# Get the LogLimit object which should be used to control the minimum log level
-# for module `mod`.
-function log_limiter(mod::Module)
-    get!(_registered_limiters, mod) do
-        parent = log_limiter(module_parent(mod))
-        loglimit = LogLimit(parent)
-        push!(parent, loglimit)
-        loglimit
-    end
-end
-
-
 """
     enable_logging(logger=global_logger(), level)
 
@@ -363,40 +348,17 @@ enable_logging(level) = enable_logging(global_logger(), level)
 
 
 """
-    disable_logging(module, level)
+    disable_logging(level)
 
-Disable all log messages from `module` and its submodules, at log levels equal
-to or less than `level`.  This is a *global* setting per module, intended to
-make debug logging extremely cheap when disabled.
+Disable all log messages at log levels equal to or less than `level`.  This is
+a *global* setting, intended to make debug logging extremely cheap when
+disabled.
 """
-disable_logging(mod::Module, level) = disable_logging(log_limiter(mod), level)
-disable_logging(level) = disable_logging(Main, level)
-
-function disable_logging(limit::LogLimit, max_disabled_level)
-    limit.max_disabled_level = max_disabled_level
-    for child in limit.children
-        disable_logging(child, max_disabled_level)
-    end
+function disable_logging(level)
+    _max_disabled_level[] = level
 end
 
-# FIXME: The following could do with rethinking.  Ideally we'd have both a
-# single function `shouldlog`, and users shouldn't need to know about
-# the existence of `LogLimit`.
-#
-# Base.:<(level::LogLevel, other_level) = Base.:<(convert(Int, level), convert(Int,other_level))
-# Base.:<(other_level, level::LogLevel) = Base.:<(convert(Int, level), convert(Int,other_level))
-"""
-    shouldlog(limit::LogLimit, message_level)
-
-Determine whether a message of severity `message_level` should be logged
-according to `limit`.  You should only need to override this when using custom
-log level types in `@logmsg`.
-"""
-shouldlog(limit::LogLimit, message_level) = limit.max_disabled_level < message_level
-
-
 function __init__()
-    _registered_limiters[Main] = LogLimit(BelowMinLevel)
     global _global_logger = SimpleLogger(STDERR)
 end
 
