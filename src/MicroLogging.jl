@@ -11,7 +11,7 @@ export
     @debug, @info, @warn, @error, @logmsg,
     # Log control
     with_logger, current_logger, global_logger,
-    disable_logging, enable_logging,
+    disable_logging, enable_logging!,
     # Logger methods
     logmsg, shouldlog,
     # Example logger
@@ -363,12 +363,20 @@ current_logger() = current_logstate().logger
 #-------------------------------------------------------------------------------
 
 """
-    enable_logging(logger=global_logger(), level)
+    enable_logging!(level)
 
 Enable logging for all messages with log level greater than or equal to
-`level`.  `logger` defaults to `global_logger()`.
+`level`, for the current logger.
 """
-enable_logging(level) = enable_logging(global_logger(), level)
+function enable_logging!(level)
+    logger = current_logger()
+    enable_logging!(logger, level)
+    if haskey(task_local_storage(), :LOGGER_STATE)
+        task_local_storage()[:LOGGER_STATE] = LogState(logger)
+    else
+        global _global_logstate = LogState(logger)
+    end
+end
 
 
 """

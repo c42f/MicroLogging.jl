@@ -1,6 +1,5 @@
 using MicroLogging
-using Base.Test
-
+using Base.Test 
 import MicroLogging: LogLevel, BelowMinLevel, Debug, Info, Warn, Error, NoLogs
 
 if VERSION < v"0.6-"
@@ -34,6 +33,11 @@ end
 TestLogger(min_level=BelowMinLevel) = TestLogger(LogRecord[], min_level)
 
 MicroLogging.min_enabled_level(logger::TestLogger) = logger.min_level
+
+function MicroLogging.enable_logging!(logger::TestLogger, level)
+    logger.min_level = level
+    logger
+end
 
 function MicroLogging.shouldlog(logger::TestLogger, level, module_, filepath, line, id, max_log, progress)
     true
@@ -72,7 +76,6 @@ end
 
 # Use superset operator for improved log message reporting in @test
 ⊃(r::LogRecord, ref) = record_matches(r, ref)
-
 
 #-------------------------------------------------------------------------------
 #-------------------------------------------------------------------------------
@@ -176,50 +179,95 @@ end
 
 
 #-------------------------------------------------------------------------------
-# Very early global log filtering via disable_logging()
+# Early log level filtering
+
 @testset "Early log filtering" begin
-    function log_each_level()
-        collect_logs() do
+    @testset "Log filtering, per task logger" begin
+        # enable_logging!() with TLS logger
+        logs = collect_logs() do
+            @debug "a"
+            enable_logging!(Info)
             @debug "a"
             @info  "b"
+            enable_logging!(Error)
             @warn  "c"
             @error "d"
         end
+
+        @test logs[1] ⊃ (Debug, "a")
+        @test logs[2] ⊃ (Info , "b")
+        @test logs[3] ⊃ (Error, "d")
+        @test length(logs) == 3
     end
 
-    disable_logging(BelowMinLevel)
-    logs = log_each_level()
-    @test logs[1] ⊃ (Debug, "a")
-    @test logs[2] ⊃ (Info , "b")
-    @test logs[3] ⊃ (Warn , "c")
-    @test logs[4] ⊃ (Error, "d")
-    @test length(logs) == 4
+    @testset "Log filtering, global logger" begin
+        # Same test as above, but with global logger
+        old_logger = global_logger()
+        logger = TestLogger(Debug)
+        global_logger(logger)
+        @debug "a"
+        enable_logging!(Info)
+        @debug "a"
+        @info  "b"
+        enable_logging!(Error)
+        @warn  "c"
+        @error "d"
+        logs = logger.records
+        global_logger(old_logger)
 
-    disable_logging(Debug)
-    logs = log_each_level()
-    @test logs[1] ⊃ (Info , "b")
-    @test logs[2] ⊃ (Warn , "c")
-    @test logs[3] ⊃ (Error, "d")
-    @test length(logs) == 3
+        @test logs[1] ⊃ (Debug, "a")
+        @test logs[2] ⊃ (Info , "b")
+        @test logs[3] ⊃ (Error, "d")
+        @test length(logs) == 3
+    end
 
-    disable_logging(Info)
-    logs = log_each_level()
-    @test logs[1] ⊃ (Warn , "c")
-    @test logs[2] ⊃ (Error, "d")
-    @test length(logs) == 2
+    @testset "Log level filtering - global flag" begin
+        # Test utility: Log once at each standard level
+        function log_each_level()
+            collect_logs() do
+                @debug "a"
+                @info  "b"
+                @warn  "c"
+                @error "d"
+            end
+        end
 
-    disable_logging(Warn)
-    logs = log_each_level()
-    @test logs[1] ⊃ (Error, "d")
-    @test length(logs) == 1
+        disable_logging(BelowMinLevel)
+        logs = log_each_level()
+        @test logs[1] ⊃ (Debug, "a")
+        @test logs[2] ⊃ (Info , "b")
+        @test logs[3] ⊃ (Warn , "c")
+        @test logs[4] ⊃ (Error, "d")
+        @test length(logs) == 4
 
-    disable_logging(Error)
-    logs = log_each_level()
-    @test length(logs) == 0
+        disable_logging(Debug)
+        logs = log_each_level()
+        @test logs[1] ⊃ (Info , "b")
+        @test logs[2] ⊃ (Warn , "c")
+        @test logs[3] ⊃ (Error, "d")
+        @test length(logs) == 3
 
-    # Reset to default
-    disable_logging(BelowMinLevel)
+        disable_logging(Info)
+        logs = log_each_level()
+        @test logs[1] ⊃ (Warn , "c")
+        @test logs[2] ⊃ (Error, "d")
+        @test length(logs) == 2
+
+        disable_logging(Warn)
+        logs = log_each_level()
+        @test logs[1] ⊃ (Error, "d")
+        @test length(logs) == 1
+
+        disable_logging(Error)
+        logs = log_each_level()
+        @test length(logs) == 0
+
+        # Reset to default
+        disable_logging(BelowMinLevel)
+    end
 end
+
+#-------------------------------------------------------------------------------
 
 @eval module A
     using MicroLogging
