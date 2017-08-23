@@ -21,9 +21,6 @@ function enable_logging(logger::SimpleLogger, level)
 end
 
 function shouldlog(logger::SimpleLogger, level, module_, filepath, line, id, max_log, progress)
-    if !(logger.min_level <= level)
-        return false
-    end
     if max_log !== nothing
         count = get!(logger.message_counts, id, 0)
         count += 1
@@ -37,6 +34,11 @@ function shouldlog(logger::SimpleLogger, level, module_, filepath, line, id, max
     end
     return true
 end
+
+function min_enabled_level(logger::SimpleLogger)
+    return logger.min_level
+end
+
 
 function formatmsg(logger::SimpleLogger, io, msg)
     print(io, msg)

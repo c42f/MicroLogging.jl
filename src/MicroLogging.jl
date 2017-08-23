@@ -26,7 +26,18 @@ any work is done formatting the log message and other metadata.
 """
 @enum LogLevel BelowMinLevel=typemin(Int32) Debug=-1000 Info=0 Warn=1000 Error=2000 NoLogs=typemax(Int32)
 
-const _max_disabled_level = Ref(BelowMinLevel)
+# Global log limiting mechanism for super fast but inflexible global log
+# limiting.
+const _min_enabled_level = Ref(Debug)
+
+# A concretely typed cache of data extracted from the logger, plus the logger
+# itself.
+struct LogState
+    min_enabled_level::LogLevel
+    logger
+end
+
+LogState(logger) = LogState(min_enabled_level(logger), logger)
 
 include("handlers.jl")
 
@@ -111,18 +122,21 @@ function logmsg_code(module_, file, line, level, message, exs...)
         end
     end
     quote
-        if _max_disabled_level[] < $level
-            logger = current_logger()
-            # Second chance at an early bail-out, based on arbitrary
-            # logger-specific logic.
-            if shouldlog(logger, $level, $module_, $file, $line, $id, $max_log, $progress)
-                # Bind log message generation into a closure, allowing us to defer
-                # creation and formatting of messages until after filtering.
-                #
-                # Use FastClosures.@closure to work around https://github.com/JuliaLang/julia/issues/15276
-                create_msg = @closure (logger, level, module_, filepath, line, id) ->
-                        logmsg(logger, level, $(esc(message)), module_, filepath, line, id; $(kwargs...))
-                dispatchmsg(logger, $level, $module_, $file, $line, $id, create_msg)
+        if $level >= _min_enabled_level[]
+            logstate = current_logstate()
+            if $level >= logstate.min_enabled_level
+                logger = logstate.logger
+                # Second chance at an early bail-out, based on arbitrary
+                # logger-specific logic.
+                if shouldlog(logger, $level, $module_, $file, $line, $id, $max_log, $progress)
+                    # Bind log message generation into a closure, allowing us to defer
+                    # creation and formatting of messages until after filtering.
+                    #
+                    # Use FastClosures.@closure to work around https://github.com/JuliaLang/julia/issues/15276
+                    create_msg = @closure (logger, level, module_, filepath, line, id) ->
+                            logmsg(logger, level, $(esc(message)), module_, filepath, line, id; $(kwargs...))
+                    dispatchmsg(logger, $level, $module_, $file, $line, $id, create_msg)
+                end
             end
         end
         nothing
@@ -252,6 +266,15 @@ function shouldlog(logger, level, module_, filepath, line, id, max_log, progress
 end
 
 
+"""
+    min_enabled_level(logger)
+
+Return the maximum disabled level for `logger` for early filtering.  That is,
+the log level below or equal to which all messages are filtered.
+"""
+min_enabled_level(logger) = Info
+
+
 function dispatchmsg(logger, level, module_, filepath, line, id, create_msg)
     # Catch all exceptions, to prevent log message generation from crashing
     # the program.  This lets users confidently toggle little-used
@@ -280,7 +303,7 @@ end
 #-------------------------------------------------------------------------------
 # Logger control and lookup
 
-_global_logger = nothing  # See __init__
+_global_logstate = LogState(BelowMinLevel, nothing)  # See __init__
 
 """
     global_logger()
@@ -292,8 +315,20 @@ exists for the current task.
 
 Set the global logger to `logger`.
 """
-global_logger() = _global_logger
-global_logger(logger) = (global _global_logger = logger; )
+global_logger() = _global_logstate.logger
+
+function global_logger(logger)
+    global _global_logstate = LogState(logger)
+end
+
+function current_logstate()
+    get(task_local_storage(), :LOGGER_STATE, _global_logstate)::LogState
+end
+
+function with_logstate(f::Function, logstate)
+    task_local_storage(f, :LOGGER_STATE, logstate)
+end
+
 
 """
     with_logger(function, logger)
@@ -313,7 +348,8 @@ with_logger(logger) do
 end
 ```
 """
-with_logger(f::Function, loghandler) = task_local_storage(f, :CURRENT_LOGGER, loghandler)
+with_logger(f::Function, logger) = with_logstate(f, LogState(logger))
+
 
 """
     current_logger()
@@ -321,22 +357,10 @@ with_logger(f::Function, loghandler) = task_local_storage(f, :CURRENT_LOGGER, lo
 Return the logger for the current task, or the global logger if none is
 is attached to the task.
 """
-current_logger() = get(task_local_storage(), :CURRENT_LOGGER, _global_logger)
+current_logger() = current_logstate().logger
 
 
 #-------------------------------------------------------------------------------
-# Basic log control and per-module log limiting machinery
-
-mutable struct LogLimit
-    max_disabled_level::LogLevel
-    children::Vector{LogLimit}
-end
-
-LogLimit(parent::LogLimit) = LogLimit(parent.max_disabled_level, Vector{LogLimit}())
-LogLimit(level::LogLevel)  = LogLimit(level, Vector{LogLimit}())
-
-Base.push!(parent::LogLimit, child) = push!(parent.children, child)
-
 
 """
     enable_logging(logger=global_logger(), level)
@@ -354,12 +378,27 @@ Disable all log messages at log levels equal to or less than `level`.  This is
 a *global* setting, intended to make debug logging extremely cheap when
 disabled.
 """
-function disable_logging(level)
-    _max_disabled_level[] = level
+function disable_logging(level::LogLevel)
+    if level == BelowMinLevel
+        _min_enabled_level[] = Debug
+    elseif level == Debug
+        _min_enabled_level[] = Info
+    elseif level == Info
+        _min_enabled_level[] = Warn
+    elseif level == Warn
+        _min_enabled_level[] = Error
+    elseif level == Error
+        _min_enabled_level[] = NoLogs
+    else
+        # Ugh. Can we do the above in a cleaner way?  There's no successor()
+        # and predecessor() for ordered sets generated by @enum
+        @assert "Unknown log level $level"
+    end
 end
 
 function __init__()
-    global _global_logger = SimpleLogger(STDERR)
+    # Need to set this in __init__, as it refers to STDERR
+    global_logger(SimpleLogger(STDERR))
 end
 
 

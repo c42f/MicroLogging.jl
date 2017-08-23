@@ -33,8 +33,10 @@ end
 
 TestLogger(min_level=BelowMinLevel) = TestLogger(LogRecord[], min_level)
 
+MicroLogging.min_enabled_level(logger::TestLogger) = logger.min_level
+
 function MicroLogging.shouldlog(logger::TestLogger, level, module_, filepath, line, id, max_log, progress)
-    level >= logger.min_level
+    true
 end
 
 function MicroLogging.logmsg(logger::TestLogger, level, msg, module_, filepath, line, id; kwargs...)
