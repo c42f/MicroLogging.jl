@@ -25,7 +25,7 @@ end
 LogRecord(args...; kwargs...) = LogRecord(args..., kwargs)
 LogRecord(level, msg, module_=nothing, filepath=nothing, line=nothing, id=nothing; kwargs...) = LogRecord(level, msg, module_, filepath, line, id, kwargs)
 
-mutable struct TestLogger
+mutable struct TestLogger <: AbstractLogger
     records::Vector{LogRecord}
     min_level::LogLevel
 end

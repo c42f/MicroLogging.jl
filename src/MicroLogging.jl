@@ -12,10 +12,19 @@ export
     # Log control
     with_logger, current_logger, global_logger,
     disable_logging, configure_logging,
+    # Logger type
+    AbstractLogger,
     # Logger methods
     logmsg, shouldlog,
     # Example logger
     SimpleLogger
+
+"""
+A logger controls how log records are filtered and dispatched.  When a log
+record is generated, this is the first piece of user configurable code which
+gets to inspect the record and decide what to do with it.
+"""
+abstract type AbstractLogger ; end
 
 
 """
@@ -34,7 +43,7 @@ const _min_enabled_level = Ref(Debug)
 # itself.
 struct LogState
     min_enabled_level::LogLevel
-    logger
+    logger::AbstractLogger
 end
 
 LogState(logger) = LogState(min_enabled_level(logger), logger)
@@ -261,7 +270,8 @@ Additional log control hints supplied at the log site are `max_log` and
 `progress` (see `@logmsg`), which are passed in here to allow for efficient log
 filtering.
 """
-function shouldlog(logger, level, module_, filepath, line, id, max_log, progress)
+function shouldlog(logger::AbstractLogger, level, module_,
+                   filepath, line, id, max_log, progress)
     true
 end
 
@@ -272,7 +282,7 @@ end
 Return the maximum disabled level for `logger` for early filtering.  That is,
 the log level below or equal to which all messages are filtered.
 """
-min_enabled_level(logger) = Info
+min_enabled_level(logger::AbstractLogger) = Info
 
 
 function dispatchmsg(logger, level, module_, filepath, line, id, create_msg)
@@ -300,10 +310,23 @@ function dispatchmsg(logger, level, module_, filepath, line, id, create_msg)
     nothing
 end
 
+
+#-------------------------------------------------------------------------------
+"""
+    NullLogger()
+
+Logger which disables all messages and produces no output
+"""
+struct NullLogger <: AbstractLogger; end
+
+min_enabled_level(::NullLogger) = NoLogs
+shouldlog(::NullLogger, a...) = false
+logmsg(::NullLogger, a...; kws...) = error("Null logger logmsg() should not be called")
+
 #-------------------------------------------------------------------------------
 # Logger control and lookup
 
-_global_logstate = LogState(BelowMinLevel, nothing)  # See __init__
+_global_logstate = LogState(BelowMinLevel, NullLogger())  # See __init__
 
 """
     global_logger()
@@ -317,7 +340,7 @@ Set the global logger to `logger`.
 """
 global_logger() = _global_logstate.logger
 
-function global_logger(logger)
+function global_logger(logger::AbstractLogger)
     global _global_logstate = LogState(logger)
 end
 
@@ -348,7 +371,8 @@ with_logger(logger) do
 end
 ```
 """
-with_logger(f::Function, logger) = with_logstate(f, LogState(logger))
+with_logger(f::Function, logger::AbstractLogger) =
+    with_logstate(f, LogState(logger))
 
 
 """
@@ -383,7 +407,7 @@ Call `configure_logging` with the current logger, and update cached log
 filtering information.
 """
 function configure_logging(args...; kwargs...)
-    logger = configure_logging(current_logger(), args...; kwargs...)
+    logger = configure_logging(current_logger(), args...; kwargs...)::AbstractLogger
     if haskey(task_local_storage(), :LOGGER_STATE)
         task_local_storage()[:LOGGER_STATE] = LogState(logger)
     else
