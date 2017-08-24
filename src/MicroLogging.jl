@@ -11,7 +11,7 @@ export
     @debug, @info, @warn, @error, @logmsg,
     # Log control
     with_logger, current_logger, global_logger,
-    disable_logging, enable_logging!,
+    disable_logging, configure_logging,
     # Logger methods
     logmsg, shouldlog,
     # Example logger
@@ -362,20 +362,34 @@ current_logger() = current_logstate().logger
 
 #-------------------------------------------------------------------------------
 
-"""
-    enable_logging!(level)
+parse_level(level) = level
+parse_level(level::String) = Symbol(tolower(level))
+function parse_level(level::Symbol)
+    if      level == :belowminlevel  return  BelowMinLevel
+    elseif  level == :debug          return  Debug
+    elseif  level == :info           return  Info
+    elseif  level == :warn           return  Warn
+    elseif  level == :error          return  Error
+    elseif  level == :nologs         return  NoLogs
+    else
+        throw(ArgumentError("Unknown log level $level"))
+    end
+end
 
-Enable logging for all messages with log level greater than or equal to
-`level`, for the current logger.
 """
-function enable_logging!(level)
-    logger = current_logger()
-    enable_logging!(logger, level)
+    configure_logging(args...; kwargs...)
+
+Call `configure_logging` with the current logger, and update cached log
+filtering information.
+"""
+function configure_logging(args...; kwargs...)
+    logger = configure_logging(current_logger(), args...; kwargs...)
     if haskey(task_local_storage(), :LOGGER_STATE)
         task_local_storage()[:LOGGER_STATE] = LogState(logger)
     else
         global _global_logstate = LogState(logger)
     end
+    logger
 end
 
 
@@ -403,6 +417,7 @@ function disable_logging(level::LogLevel)
         @assert "Unknown log level $level"
     end
 end
+disable_logging(level) = disable_logging(parse_level(level))
 
 function __init__()
     # Need to set this in __init__, as it refers to STDERR

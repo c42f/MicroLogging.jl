@@ -34,8 +34,8 @@ TestLogger(min_level=BelowMinLevel) = TestLogger(LogRecord[], min_level)
 
 MicroLogging.min_enabled_level(logger::TestLogger) = logger.min_level
 
-function MicroLogging.enable_logging!(logger::TestLogger, level)
-    logger.min_level = level
+function MicroLogging.configure_logging(logger::TestLogger; min_level=Info)
+    logger.min_level = min_level
     logger
 end
 
@@ -183,13 +183,12 @@ end
 
 @testset "Early log filtering" begin
     @testset "Log filtering, per task logger" begin
-        # enable_logging!() with TLS logger
         logs = collect_logs() do
             @debug "a"
-            enable_logging!(Info)
+            configure_logging(min_level=Info)
             @debug "a"
             @info  "b"
-            enable_logging!(Error)
+            configure_logging(min_level=Error)
             @warn  "c"
             @error "d"
         end
@@ -206,10 +205,10 @@ end
         logger = TestLogger(Debug)
         global_logger(logger)
         @debug "a"
-        enable_logging!(Info)
+        configure_logging(min_level=Info)
         @debug "a"
         @info  "b"
-        enable_logging!(Error)
+        configure_logging(min_level=Error)
         @warn  "c"
         @error "d"
         logs = logger.records

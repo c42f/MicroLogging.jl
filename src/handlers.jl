@@ -6,22 +6,35 @@ basic per-level color support.
 """
 mutable struct SimpleLogger
     stream::IO
-    min_level::LogLevel
+    default_min_level::LogLevel
     interactive_style::Bool
     prev_progress_key
     message_counts::Dict{Symbol,Int}
+    module_limits::Dict{Module,LogLevel}
 end
 
 function SimpleLogger(stream::IO; min_level=Info, interactive_style=isinteractive())
-    SimpleLogger(stream, min_level, interactive_style, nothing, Dict{Symbol,Int}())
+    SimpleLogger(stream, min_level, interactive_style, nothing,
+                 Dict{Symbol,Int}(), Dict{Module,LogLevel}())
 end
 
-function enable_logging!(logger::SimpleLogger, level)
-    logger.min_level = level
+function configure_logging(logger::SimpleLogger, module_=nothing;
+                           min_level=Info)
+    min_level = parse_level(min_level)
+    if module_ == nothing
+        empty!(logger.module_limits)
+        logger.default_min_level = min_level
+    else
+        # Per-module log limiting
+        logger.module_limits[module_] = min_level
+    end
     logger
 end
 
 function shouldlog(logger::SimpleLogger, level, module_, filepath, line, id, max_log, progress)
+    if level < get(logger.module_limits, module_, logger.default_min_level)
+        return false
+    end
     if max_log !== nothing
         count = get!(logger.message_counts, id, 0)
         count += 1
@@ -37,7 +50,13 @@ function shouldlog(logger::SimpleLogger, level, module_, filepath, line, id, max
 end
 
 function min_enabled_level(logger::SimpleLogger)
-    return logger.min_level
+    min_level = logger.default_min_level
+    for (_,level) ∈ logger.module_limits
+        if level < min_level
+            min_level = level
+        end
+    end
+    return min_level
 end
 
 
