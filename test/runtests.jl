@@ -305,11 +305,10 @@ end
         level::Int
     end
 
+    Base.convert(::Type{MicroLogging.LogLevel}, l::MyLevel) = MicroLogging.LogLevel(l.level)
+
     const critical = MyLevel(10000)
     const debug_verbose = MyLevel(-10000)
-
-    Base.:<(l1::MyLevel, l2::MicroLogging.LogLevel) = l1.level < Int(l2)
-    Base.:<(l1::MicroLogging.LogLevel, l2::MyLevel) = Int(l1) < l2.level
 end
 
 @testset "Custom log levels" begin
