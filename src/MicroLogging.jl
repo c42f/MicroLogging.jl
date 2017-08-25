@@ -62,6 +62,21 @@ function Base.show(io::IO, level::LogLevel)
     end
 end
 
+parse_level(level) = level
+parse_level(level::String) = Symbol(tolower(level))
+function parse_level(level::Symbol)
+    if      level == :belowminlevel  return  BelowMinLevel
+    elseif  level == :debug          return  Debug
+    elseif  level == :info           return  Info
+    elseif  level == :warn           return  Warn
+    elseif  level == :error          return  Error
+    elseif  level == :nologs         return  NoLogs
+    else
+        throw(ArgumentError("Unknown log level $level"))
+    end
+end
+
+
 # Global log limiting mechanism for super fast but inflexible global log
 # limiting.
 const _min_enabled_level = Ref(Debug)
@@ -415,20 +430,6 @@ current_logger() = current_logstate().logger
 
 
 #-------------------------------------------------------------------------------
-
-parse_level(level) = level
-parse_level(level::String) = Symbol(tolower(level))
-function parse_level(level::Symbol)
-    if      level == :belowminlevel  return  BelowMinLevel
-    elseif  level == :debug          return  Debug
-    elseif  level == :info           return  Info
-    elseif  level == :warn           return  Warn
-    elseif  level == :error          return  Error
-    elseif  level == :nologs         return  NoLogs
-    else
-        throw(ArgumentError("Unknown log level $level"))
-    end
-end
 
 """
     configure_logging(args...; kwargs...)
