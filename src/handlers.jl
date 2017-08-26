@@ -113,10 +113,21 @@ function termlength(str)
 end
 
 function levelstyle(level::LogLevel)
-    level == Debug && return (:cyan,   false, "- DEBUG")
-    level == Info  && return (:blue,   false, "-- INFO")
-    level == Warn  && return (:yellow, true , "-- WARN")
-    level == Error && return (:red,    true , "- ERROR")
+    if     level < Info  return (:cyan,   false)
+    elseif level < Warn  return (:blue,   false)
+    elseif level < Error return (:yellow, true)
+    else                 return (:red,    true)
+    end
+end
+
+levelstring(level) = string(level)
+function levelstring(level::LogLevel)
+    if     level == Debug  return "- DEBUG"
+    elseif level == Info   return "-- INFO"
+    elseif level == Warn   return "-- WARN"
+    elseif level == Error  return "- ERROR"
+    else                   return string(level)
+    end
 end
 
 function print_with_col(color, io, str; bold=false)
@@ -138,7 +149,8 @@ function logmsg(logger::SimpleLogger, level, msg::AbstractString, module_, filep
     # Log printing
     filename = basename(filepath)
     if logger.interactive_style
-        color, bold, levelstr = levelstyle(level)
+        color, bold = levelstyle(convert(LogLevel, level))
+        levelstr = levelstring(level)
         # Attempt at avoiding the problem of distracting metadata in info log
         # messages - print metadata to the right hand side.
         metastr = "[$module_:$filename:$line] $levelstr"
