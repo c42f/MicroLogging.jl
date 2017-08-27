@@ -97,6 +97,16 @@ include("handlers.jl")
 #-------------------------------------------------------------------------------
 # Logging macros and frontend
 
+@inline function invariant_deref(ref)
+    LogLevel(Base.llvmcall(
+    ("!0 = !{}",
+    """
+    %r = load i32, i32* %0, align 4, !invariant.load !0
+    ret i32 %r
+    """),
+    Int32, Tuple{Ptr{Int32}}, Base.unsafe_convert(Ptr{Int32}, Base.unsafe_convert(Ptr{LogLevel}, ref))))
+end
+
 # Generate code for @logmsg
 function logmsg_code(module_, file, line, level, message, exs...)
     progress = nothing
@@ -175,6 +185,9 @@ function logmsg_code(module_, file, line, level, message, exs...)
     end
     quote
         std_level = convert(LogLevel, $level)
+        # HACK!! Enables hoisting of the load of _min_enabled_level in some
+        # limited circumstances.  But will lead to miscompilation in others.
+        #if std_level >= invariant_deref(_min_enabled_level)
         if std_level >= _min_enabled_level[]
             logstate = current_logstate()
             if std_level >= logstate.min_enabled_level
@@ -389,12 +402,22 @@ function global_logger(logger::AbstractLogger)
     logger
 end
 
-function current_logstate()
-    get(task_local_storage(), :LOGGER_STATE, _global_logstate)::LogState
+@inline function current_logstate()
+    # HACK!! Abuse the current_task().result as a usable Any slot in the TLS,
+    # to avoid going via the hash map.  Makes a big perf difference for early
+    # filtering.
+    state = current_task().result
+    (state !== nothing ? state : _global_logstate)::LogState
+    #get(task_local_storage(), :LOGGER_STATE, _global_logstate)::LogState
 end
 
 function with_logstate(f::Function, logstate)
-    task_local_storage(f, :LOGGER_STATE, logstate)
+    oldstate = current_task().result
+    current_task().result = logstate
+    res = f()
+    current_task().result = oldstate
+    res
+    # task_local_storage(f, :LOGGER_STATE, logstate)
 end
 
 
@@ -439,12 +462,18 @@ filtering information.
 """
 function configure_logging(args...; kwargs...)
     logger = configure_logging(current_logger(), args...; kwargs...)::AbstractLogger
-    if haskey(task_local_storage(), :LOGGER_STATE)
-        task_local_storage()[:LOGGER_STATE] = LogState(logger)
+    if typeof(current_task()) == LogState
+        current_task().result = LogState(logger)
     else
         global _global_logstate = LogState(logger)
     end
     logger
+#    if haskey(task_local_storage(), :LOGGER_STATE)
+#        task_local_storage()[:LOGGER_STATE] = LogState(logger)
+#    else
+#        global _global_logstate = LogState(logger)
+#    end
+#    logger
 end
 
 
