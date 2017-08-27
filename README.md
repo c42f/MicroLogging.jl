@@ -50,7 +50,7 @@ end
     error("Should not be executed")
     "This message is never generated"
 end
-enable_logging(MicroLogging.Debug)
+configure_logging(min_level=:debug)
 @debug "Logging enabled at debug level and above"
 @info md"# Log suppression with `max_log`"
 for i=1:20
@@ -108,11 +108,11 @@ function f(x)
     @error "a LogTest module error message $x"
 end
 end
-disable_logging(MicroLogging.Info)
-@info "Disable log generation for all Info and Debug"
+configure_logging(min_level=:warn)
+@warn "Early log filtering to warn level and above"
 LogTest.f(1)
-@info "Disable no levels (the default)"
-disable_logging(Main, MicroLogging.BelowMinLevel)
+@warn "Early log filtering to info and above (the default)"
+configure_logging(min_level=:info)
 LogTest.f(2)
 ```
 
@@ -147,11 +147,11 @@ other log record metadata.
 *TODO*: can we generalize early filtering (eg, allow package-defined log
 levels) without loosing efficiency?
 
-In `MicroLogging`, very early filtering can be controlled on a per-module basis
-using the `enable_logging` function:
+In `MicroLogging`, very early filtering can be controlled using the
+`configure_logging` function:
 
 ```julia
-enable_logging(MyModule, MicroLogging.Debug)
+configure_logging(min_level=:debug)
 ```
 
 ### Logging macros
@@ -256,17 +256,3 @@ end
 
 ... *FIXME* more to write here
 
-
-## TODO
-
-* Allow log messages to be grouped inside a module if desired
-* Consider another log level (verbose? notice?) between debug and warn, which
-  would be enabled globally but disabled in the Logger by default.
-* Consider making the first early-out a global variable, rather than module
-  specific.
-* Case study: Try replacing Base.depwarn
-* Case study: Try replacing debug logging in base/loading.jl
-* Case study: Figure out how to integrate with ProgressMeter
-  * Why not do it in the ProgressMeter frontend?  Well, then the update
-    frequency would be under module author control rather than a backend
-    property.

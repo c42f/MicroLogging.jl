@@ -26,7 +26,7 @@ end
     error("Should not be executed")
     "This message is never generated"
 end
-enable_logging(MicroLogging.Debug)
+configure_logging(min_level=:debug)
 @debug "Logging enabled at debug level and above"
 @info md"# Log suppression with `max_log`"
 for i=1:20
@@ -84,9 +84,9 @@ function f(x)
     @error "a LogTest module error message $x"
 end
 end
-disable_logging(MicroLogging.Info)
-@info "Disable log generation for all Info and Debug"
+configure_logging(min_level=:warn)
+@warn "Early log filtering to warn level and above"
 LogTest.f(1)
-@info "Disable no levels (the default)"
-disable_logging(Main, MicroLogging.BelowMinLevel)
+@warn "Early log filtering to info and above (the default)"
+configure_logging(min_level=:info)
 LogTest.f(2)

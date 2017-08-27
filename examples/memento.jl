@@ -9,10 +9,10 @@ using Memento
 # Confusingly, this is the thing which goes by the name "logger" in
 # MicroLogging terminology.  Here it's just used as a placeholder to dispatch
 # to the global Memento logger hierarchy.
-immutable MementoBackend
+immutable LogShim <: AbstractLogger
 end
 
-function MicroLogging.logmsg(::MementoBackend, ml_level, msg, module_, filepath, line, id; kwargs...)
+function MicroLogging.logmsg(::LogShim, ml_level, msg, module_, filepath, line, id; kwargs...)
     # TODO: Map the `group` keyword (or something equivalent) into the right logger.
     # For now, assume a module-based logger.
     logger = get_logger(module_)
@@ -28,7 +28,7 @@ function MicroLogging.logmsg(::MementoBackend, ml_level, msg, module_, filepath,
     @sync log(logger, rec)
 end
 
-function MicroLogging.shouldlog(::MementoBackend, ml_level, module_, filepath, line, id, max_log, progress)
+function MicroLogging.shouldlog(::LogShim, ml_level, module_, filepath, line, id, max_log, progress)
     # TODO - implement early out filtering for efficiency
     true
 end
@@ -58,7 +58,7 @@ using MicroLogging
 using Memento
 
 # MicroLogging setup - set Memento as backend
-global_logger(MementoShim.MementoBackend())
+global_logger(MementoShim.LogShim())
 
 # Configure Memento
 Memento.config("info")
@@ -68,7 +68,7 @@ add_handler(A_logger, DefaultHandler(Syslog(:local0, "julia"), DefaultFormatter(
 set_level(A_logger, "warn")
 
 
-# Now, do the actaul logging
+# Now, do the actual logging
 @info "Global log message"
 A.foo()
 
