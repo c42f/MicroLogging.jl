@@ -120,7 +120,7 @@ The script above produces console output like the following.  Note the
 unconventional choice of metadata placement.  In interactive mode,
 `MicroLogging` tries to put this out of your way as much as possible, by
 placing it on the right hand of the terminal.  The premise here is that you
-want to see your log message, not some metadata.
+generally want to see your log message, not some metadata.
 
 ![Micrologging example screenshot](doc/micrologging_example.png)
 
@@ -144,15 +144,15 @@ are filtered out.  This seems simple, effective and efficient as a first pass
 filter. Naturally, further filtering may also occur based on the log message or
 other log record metadata.
 
-*TODO*: can we generalize early filtering (eg, allow package-defined log
-levels) without loosing efficiency?
-
-In `MicroLogging`, very early filtering can be controlled using the
-`configure_logging` function:
+In `MicroLogging`, early filtering can be controlled using the
+`configure_logging` function, which configures filtering of the current logger:
 
 ```julia
 configure_logging(min_level=:debug)
 ```
+
+For even more efficiency, the `disable_logging()` function can be used to
+globally disable logging below a given log for all loggers.
 
 ### Logging macros
 
@@ -173,9 +173,11 @@ x = 42
 To achieve early filtering, this example currently expands to something like
 
 ```julia
-mod_log_ctx = $(get_logger(current_module()))
-if shouldlog(mod_log_ctx, Info)
-    logmsg(current_logger(), Info, "my value is x = $x", #=...=#)
+if Info >= MicroLogging._min_enabled_level[]
+    logger = $(current_logger())
+    if shouldlog(logger, Info)
+        logmsg(current_logger(), Info, "my value is x = $x", #=...=#)
+    end
 end
 ```
 
@@ -185,12 +187,12 @@ Every log record has various types of context which can be associated with it.
 Some types of context include:
 
 * static **lexical context** - based on the location in the code - local
-    variables, line number, file, function, module.
+  variables, line number, file, function, module.
 * dynamic **caller context** - the current stack trace, and data visible in
-    it. Consider, for example, the context which can be passed with the
-    femtolisp `with-bindings` construct.
+  it. Consider, for example, the context which can be passed with the
+  femtolisp `with-bindings` construct.
 * dynamic **data context** - context created from data structures available at
-    log record creation.
+  log record creation.
 
 Log context can be used in two ways.  First, to dispatch the log record to
 appropriate handler *code*.  Second, to enrich the log record with *data* about
@@ -205,13 +207,13 @@ audiences of a logging library:
 
 * *Package authors* want to emit logs in a simple way, without caring about how
   they're dispatched.
-* *Application programmers* care about a complete application as built up from
-  many packages.  They need to control how log records are dispatched, but don't
+* *Application authors* care about a complete application as built up from
+  many packages. They need to control how log records are dispatched, but don't
   get any control over how they're created.
 
 Application programmers tend to be calling functions from many different
 packages to achieve an overall task. With dynamic scoping for log handlers, it's
-easy to control log dispatch based on task.
+easy to control log dispatch based on task:
 
 ```julia
 logger = MyLogger(#= ... =#)
@@ -233,15 +235,14 @@ community seems to have settled on using
 [per-module contexts](https://docs.python.org/3/library/logging.html#logger-objects)
 to dispatch log messages (TODO: double check how this works).
 
-TODO: Need more research about the tradeoff between thread-global lexically
-scoped loggers vs dynamically scoped loggers.  For example, Log4j 2 attacks this
-problem by adding thread context to log records via the
-["fish tagging"](https://logging.apache.org/log4j/2.x/manual/thread-context.html)
-approach.
-
 > Which metadata is automatically included with the log record?
 
-*TODO*
+Some useful metadata is automatically generated with each record:
+
+* Module
+* Location - file, line number
+* `id` - a unique Symbol for the logger invocation
+
 
 ### Efficiency - messages you never see should cost almost nothing
 
