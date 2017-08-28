@@ -97,12 +97,35 @@ include("handlers.jl")
 #-------------------------------------------------------------------------------
 # Logging macros and frontend
 
+# Generate a unique, stable, short, somewhat human readable identifier for a
+# log generation statement.  The idea here is to have a key against which log
+# records can be filtered and otherwise manipulated. The key should uniquely
+# identify the source location in the originating module, but should be stable
+# across versions of the originating module, provided the log generating
+# statement itself doesn't change.
+function log_record_id(module_, messagetemplate::String)
+    if !isdefined(module_, :_log_record_ids)
+        eval(module_, :(_log_record_ids = Set{Symbol}()))
+    end
+    record_ids::Set{Symbol} = module_._log_record_ids
+    h = hash(messagetemplate) % ((1<<24) - 1000)
+    while true
+        id = Symbol(@sprintf("%s_%06x", module_, h))
+        if !(id in record_ids)
+            push!(record_ids, id)
+            return id
+        end
+        h += 1
+    end
+end
+
 # Generate code for @logmsg
 function logmsg_code(module_, file, line, level, message, exs...)
     progress = nothing
     max_log = nothing
     # Generate a unique message id by default
-    id = Expr(:quote, gensym())
+    messagetemplate = string(message)
+    id = Expr(:quote, log_record_id(module_, messagetemplate))
     kwargs = Any[]
     for ex in exs
         if isexpr(ex, :(=)) && isa(ex.args[1], Symbol)
