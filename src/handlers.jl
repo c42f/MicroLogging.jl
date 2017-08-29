@@ -153,7 +153,7 @@ function logmsg(logger::SimpleLogger, level, msg::AbstractString, module_, filep
         levelstr = levelstring(level)
         # Attempt at avoiding the problem of distracting metadata in info log
         # messages - print metadata to the right hand side.
-        metastr = "[$module_:$filename:$line] $levelstr"
+        metastr = "$id $levelstr"
         msg = rstrip(msg, '\n')
         if progress === nothing
             if logger.prev_progress_key !== nothing

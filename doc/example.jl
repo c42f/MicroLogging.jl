@@ -76,17 +76,27 @@ $(strip(String(take!(logstream))))
 
 @info md"# Logging may be completely disabled below a given level, per module"
 module LogTest
-using MicroLogging
-function f(x)
-    @debug "a LogTest module debug message $x"
-    @info  "a LogTest module info message $x"
-    @warn  "a LogTest module warning message $x"
-    @error "a LogTest module error message $x"
-end
+    using MicroLogging
+    function f(x)
+        @debug "a LogTest module debug message $x"
+        @info  "a LogTest module info message $x"
+        @warn  "a LogTest module warning message $x"
+        @error "a LogTest module error message $x"
+    end
+    module SubModule
+        using MicroLogging
+        function f()
+            @debug "Message from sub module"
+            @info  "Message from sub module"
+            @warn  "Message from sub module"
+            @error "Message from sub module"
+        end
+    end
 end
 configure_logging(min_level=:warn)
 @warn "Early log filtering to warn level and above"
 LogTest.f(1)
+LogTest.SubModule.f()
 @warn "Early log filtering to info and above (the default)"
 configure_logging(min_level=:info)
 LogTest.f(2)

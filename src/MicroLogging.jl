@@ -97,22 +97,23 @@ include("handlers.jl")
 #-------------------------------------------------------------------------------
 # Logging macros and frontend
 
-# Generate a unique, stable, short, somewhat human readable identifier for a
-# log generation statement.  The idea here is to have a key against which log
-# records can be filtered and otherwise manipulated. The key should uniquely
-# identify the source location in the originating module, but should be stable
-# across versions of the originating module, provided the log generating
-# statement itself doesn't change.
-function log_record_id(module_, messagetemplate::String)
-    if !isdefined(module_, :_log_record_ids)
-        eval(module_, :(_log_record_ids = Set{Symbol}()))
-    end
-    record_ids::Set{Symbol} = module_._log_record_ids
-    h = hash(messagetemplate) % ((1<<24) - 1000)
+# Registry of log record ids for use during compilation, to ensure uniqueness
+# of ids.  Note that this state will only persist during module compilation
+# so it will be empty when a precompiled module is loaded.
+_log_record_ids = Set{Symbol}()
+
+# Generate a unique, stable, short, human readable identifier for a logging
+# statement.  The idea here is to have a key against which log records can be
+# filtered and otherwise manipulated. The key should uniquely identify the
+# source location in the originating module, but should be stable across
+# versions of the originating module, provided the log generating statement
+# itself doesn't change.
+function log_record_id(module_, level, message_ex)
+    h = hash(string(module_, level, message_ex)) % ((1<<24) - 1000)
     while true
-        id = Symbol(@sprintf("%s_%06x", module_, h))
-        if !(id in record_ids)
-            push!(record_ids, id)
+        id = Symbol(@sprintf("%s_%06x", replace(string(module_), '.', '_'), h))
+        if !(id in _log_record_ids)
+            push!(_log_record_ids, id)
             return id
         end
         h += 1
@@ -125,7 +126,7 @@ function logmsg_code(module_, file, line, level, message, exs...)
     max_log = nothing
     # Generate a unique message id by default
     messagetemplate = string(message)
-    id = Expr(:quote, log_record_id(module_, messagetemplate))
+    id = Expr(:quote, log_record_id(module_, level, messagetemplate))
     kwargs = Any[]
     for ex in exs
         if isexpr(ex, :(=)) && isa(ex.args[1], Symbol)
@@ -142,6 +143,9 @@ function logmsg_code(module_, file, line, level, message, exs...)
                 # id may be overridden if you really want several log
                 # statements to share the same id (eg, several pertaining to
                 # the same progress step).
+                #
+                # TODO: Refine this - doing it as is, is probably a bad idea
+                # for consistency, and is hard to make unique between modules.
                 id = v
             elseif k == :line
                 line = esc(v)

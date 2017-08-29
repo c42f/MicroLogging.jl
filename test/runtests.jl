@@ -147,7 +147,7 @@ end
     if Compat.macros_have_sourceloc # See #1
         @test record.line == kwargs[:real_line]
     end
-    @test isa(record.id, Symbol)
+    @test record.id == :Main_b70e82
 
     # User-defined metadata
     @test kwargs[:bar_val] === bar_val
