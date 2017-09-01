@@ -258,6 +258,11 @@ end
         @test logs[1] ⊃ (Error, "d")
         @test length(logs) == 1
 
+        disable_logging("Warn")
+        logs = log_each_level()
+        @test logs[1] ⊃ (Error, "d")
+        @test length(logs) == 1
+
         disable_logging(Error)
         logs = log_each_level()
         @test length(logs) == 0

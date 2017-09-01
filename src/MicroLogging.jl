@@ -63,7 +63,7 @@ function Base.show(io::IO, level::LogLevel)
 end
 
 parse_level(level) = level
-parse_level(level::String) = Symbol(tolower(level))
+parse_level(level::String) = parse_level(Symbol(lowercase(level)))
 function parse_level(level::Symbol)
     if      level == :belowminlevel  return  BelowMinLevel
     elseif  level == :debug          return  Debug
