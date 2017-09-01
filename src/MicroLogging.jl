@@ -474,6 +474,7 @@ function configure_logging(args...; kwargs...)
     logger
 end
 
+configure_logging(::AbstractLogger, args...; kwargs...) = throw(ArgumentError("No configure_logging method matches the provided arguments."))
 
 """
     disable_logging(level)
@@ -494,4 +495,3 @@ end
 
 
 end
-
