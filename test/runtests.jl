@@ -1,5 +1,5 @@
 using MicroLogging
-using Base.Test 
+using Base.Test
 import MicroLogging: LogLevel, BelowMinLevel, Debug, Info, Warn, Error, NoLogs
 
 if VERSION < v"0.6-"
@@ -209,6 +209,7 @@ end
         @debug "a"
         @info  "b"
         configure_logging(min_level=Error)
+        @test_throws ArgumentError configure_logging("unknown_argument")
         @warn  "c"
         @error "d"
         logs = logger.records
