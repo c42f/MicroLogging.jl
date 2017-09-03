@@ -246,7 +246,7 @@ macro sourceinfo()
 end
 
 
-"""
+_macro_docs = """
     @debug message  [key=value | value ...]
     @info  message  [key=value | value ...]
     @warn  message  [key=value | value ...]
@@ -308,17 +308,19 @@ a = 100
 @logmsg level "Some message with attached values" a foo(2)
 ```
 """
-macro logmsg(level, message, exs...) logmsg_code((@sourceinfo)..., esc(level), message, exs...) end
 
+macro logmsg(level, message, exs...) logmsg_code((@sourceinfo)..., esc(level), message, exs...) end
 macro debug(message, exs...) logmsg_code((@sourceinfo)..., :Debug, message, exs...) end
 macro  info(message, exs...) logmsg_code((@sourceinfo)..., :Info,  message, exs...) end
 macro  warn(message, exs...) logmsg_code((@sourceinfo)..., :Warn,  message, exs...) end
 macro error(message, exs...) logmsg_code((@sourceinfo)..., :Error, message, exs...) end
 
-@eval @doc $(@doc @logmsg) $(Symbol("@debug"))
-@eval @doc $(@doc @logmsg) $(Symbol("@info"))
-@eval @doc $(@doc @logmsg) $(Symbol("@warn"))
-@eval @doc $(@doc @logmsg) $(Symbol("@error"))
+# Logging macros share the same documentation
+@eval @doc $_macro_docs :(@logmsg)
+@eval @doc $_macro_docs :(@debug)
+@eval @doc $_macro_docs :(@info)
+@eval @doc $_macro_docs :(@warn)
+@eval @doc $_macro_docs :(@error)
 
 
 """
