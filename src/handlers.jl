@@ -145,7 +145,7 @@ function logmsg(logger::SimpleLogger, level, msg, module_, filepath, line, id; k
 end
 
 function logmsg(logger::SimpleLogger, level, msg::AbstractString, module_, filepath, line, id;
-                progress=nothing, kwargs...)
+                progress=nothing, banner=false, kwargs...)
     # Log printing
     filename = basename(filepath)
     if logger.interactive_style
@@ -164,13 +164,17 @@ function logmsg(logger::SimpleLogger, level, msg::AbstractString, module_, filep
             for (k,v) in kwargs
                 push!(msglines, string("  ", k, " = ", v))
             end
+            ncols = displaysize(logger.stream)[2]
+            if banner
+                unshift!(msglines, "-"^(ncols - length(metastr) - 1))
+            end
             for (i,msgline) in enumerate(msglines)
                 # TODO: This API is inconsistent between 0.5 & 0.6 - fix the bold stuff if possible.
                 print(logger.stream, msgline)
                 if i == 2
                     metastr = "..."
                 end
-                nspace = max(1, displaysize(logger.stream)[2] - (termlength(msgline) + length(metastr)))
+                nspace = max(1, ncols - (termlength(msgline) + length(metastr)))
                 print(logger.stream, " "^nspace)
                 print_with_col(color, logger.stream, metastr, bold=bold)
                 print(logger.stream, "\n")
