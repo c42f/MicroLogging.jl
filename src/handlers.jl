@@ -162,7 +162,11 @@ function logmsg(logger::SimpleLogger, level, msg::AbstractString, module_, filep
             logger.prev_progress_key = nothing
             msglines = split(msg, '\n')
             for (k,v) in kwargs
-                push!(msglines, string("  ", k, " = ", v))
+                vallines = split(string(v), '\n')
+                push!(msglines, string("  ", k, " = ", vallines[1]))
+                for i in 2:length(vallines)
+                    push!(msglines, "    "*vallines[i])
+                end
             end
             ncols = displaysize(logger.stream)[2]
             if banner
