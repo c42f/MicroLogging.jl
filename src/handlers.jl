@@ -64,20 +64,6 @@ function formatmsg(logger::SimpleLogger, io, msg)
     print(io, msg)
 end
 
-function formatmsg(logger::SimpleLogger, io, msg::Markdown.MD)
-    if logger.interactive_style
-        # Hack: render markdown to temporary buffer, and munge it to remove
-        # trailing newlines, even with confounding color codes.
-        io2 = IOBuffer()
-        Markdown.term(io2, msg)
-        msg = String(take!(io2))
-        msg = replace(msg, r"\n(\e\[[0-9]+m)$", s"\1")
-        print(io, msg)
-    else
-        print(io, msg)
-    end
-end
-
 function formatmsg(logger::SimpleLogger, io, ex_msg::Exception)
     bt = catch_backtrace()
     showerror(io, ex_msg, bt; backtrace=!isempty(bt))
@@ -170,7 +156,7 @@ function logmsg(logger::SimpleLogger, level, msg::AbstractString, module_, filep
             end
             ncols = displaysize(logger.stream)[2]
             if banner
-                unshift!(msglines, "-"^(ncols - length(metastr) - 1))
+                unshift!(msglines, "="^(ncols - length(metastr) - 1))
             end
             for (i,msgline) in enumerate(msglines)
                 # TODO: This API is inconsistent between 0.5 & 0.6 - fix the bold stuff if possible.
