@@ -134,8 +134,12 @@ end
     bar_val = 100
     logs = collect_logs() do
         @info "test"  bar_val  progress=0.1  foo=foo_val  2*3  real_line=(@__LINE__)
+        @info begin
+            value_in_msg_block = 1000.0
+            "test2"
+        end value_in_msg_block
     end
-    @test length(logs) == 1
+    @test length(logs) == 2
 
     record = logs[1]
 
@@ -154,6 +158,12 @@ end
     @test kwargs[:progress] == 0.1
     @test kwargs[:foo] === foo_val
     @test kwargs[Symbol(:(2*3))] === 6
+
+    # Keyword values accessible from message block
+    record2 = logs[2]
+    @test record2 ⊃ (Info,"test2")
+    kwargs = Dict(record2.kwargs)
+    @test kwargs[:value_in_msg_block] === 1000.0
 end
 
 @testset "Formatting exceptions are caught inside the logger" begin

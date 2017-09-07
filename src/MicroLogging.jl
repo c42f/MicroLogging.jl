@@ -213,8 +213,10 @@ function logmsg_code(module_, file, line, level, message, exs...)
                     # defer creation of the records until after filtering.
                     #
                     # Use FastClosures.@closure to work around https://github.com/JuliaLang/julia/issues/15276
-                    create_msg = @closure (logger, level, module_, filepath, line, id) ->
-                            logmsg(logger, level, $(esc(message)), module_, filepath, line, id; $(kwargs...))
+                    create_msg = @closure function cm(logger, level, module_, filepath, line, id)
+                        msg = $(esc(message))
+                        logmsg(logger, level, msg, module_, filepath, line, id; $(kwargs...))
+                    end
                     dispatchmsg(logger, $level, $module_, $file, $line, $id, create_msg)
                 end
             end
