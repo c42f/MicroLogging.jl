@@ -15,8 +15,7 @@ should meet the efficiency and flexibility demands of production deployment.
 ## Install
 
 ```julia
-Pkg.clone("git@github.com:c42f/FastClosures.jl.git")
-Pkg.clone("git@github.com:c42f/MicroLogging.jl.git")
+Pkg.add("MicroLogging")
 ```
 
 ## Quickstart
