@@ -23,10 +23,9 @@ Pkg.add("MicroLogging")
 ```julia
 using MicroLogging
 using Compat
-using Base.Markdown
 
 
-@info md"# Simple logging"
+@info "Simple logging" banner=true
 @info "Default level is info"
 @debug "I am an invisible debug message"
 @info """
@@ -44,14 +43,14 @@ catch err
 end
 
 
-@info md"# Early filtering of logs, for efficiency"
+@info "Early filtering of logs, for efficiency" banner=true
 @debug begin
     error("Should not be executed")
     "This message is never generated"
 end
 configure_logging(min_level=:debug)
 @debug "Logging enabled at debug level and above"
-@info md"# Log suppression with `max_log`"
+@info "Log suppression with `max_log`" banner=true
 for i=1:20
     if i > 7
         @warn "i=$i out of bounds (set max_log=2)" max_log=2
@@ -61,7 +60,7 @@ for i=1:20
 end
 
 
-@info md"# Simple progress logging"
+@info "Simple progress logging" banner=true
 for i=1:100
     sleep(0.01)
     i%40 != 0 || @warn "foo"
@@ -74,12 +73,12 @@ for i=1:100
 end
 
 
-@info md"# Task-based log dispatch using dynamic scoping"
+@info "Task-based log dispatch using dynamic scoping" banner=true
 function some_operation()
     @info "Dispatches to the current task logger, or the global logger"
 end
 logstream = IOBuffer()
-with_logger(SimpleLogger(logstream, interactive_style=false)) do
+with_logger(SimpleLogger(logstream)) do
     @info "Logging redirected"
     some_operation()
 end
@@ -91,25 +90,35 @@ $(strip(String(take!(logstream))))
 """
 
 
-@info md"# Formatting logs can't crash the application"
+@info "Formatting logs can't crash the application" banner=true
 @info "The next log line will report an exception:"
 @info "1÷0 = $(1÷0)"
 @info "... and we get to the next line without a catch"
 
 
-@info md"# Logging may be completely disabled below a given level, per module"
+@info "Logging may be completely disabled below a given level, per module" banner=true
 module LogTest
-using MicroLogging
-function f(x)
-    @debug "a LogTest module debug message $x"
-    @info  "a LogTest module info message $x"
-    @warn  "a LogTest module warning message $x"
-    @error "a LogTest module error message $x"
-end
+    using MicroLogging
+    function f(x)
+        @debug "a LogTest module debug message $x"
+        @info  "a LogTest module info message $x"
+        @warn  "a LogTest module warning message $x"
+        @error "a LogTest module error message $x"
+    end
+    module SubModule
+        using MicroLogging
+        function f()
+            @debug "Message from sub module"
+            @info  "Message from sub module"
+            @warn  "Message from sub module"
+            @error "Message from sub module"
+        end
+    end
 end
 configure_logging(min_level=:warn)
 @warn "Early log filtering to warn level and above"
 LogTest.f(1)
+LogTest.SubModule.f()
 @warn "Early log filtering to info and above (the default)"
 configure_logging(min_level=:info)
 LogTest.f(2)
