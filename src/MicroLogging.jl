@@ -372,7 +372,8 @@ function dispatchmsg(logger, level, module_, filepath, line, id, create_msg)
     # Users need to override and disable this if they want to use logging
     # as an audit trail.
     try
-        create_msg(logger, level, module_, filepath, line, id)
+        # TODO: Should we condition types here???
+        create_msg(logger, level, module_, String(filepath), line, id)
     catch err
         # Try really hard to get the message to the logger, with
         # progressively less information.
@@ -381,7 +382,11 @@ function dispatchmsg(logger, level, module_, filepath, line, id, create_msg)
             logmsg(logger, Error, msg, module_, filepath, line, id)
         catch
             try
-                logmsg(logger, Error, "Error formatting log message", module_, filepath, line, id)
+                # Give up and write to STDERR, in three independent calls to
+                # increase the odds of it getting through.
+                print(STDERR, "Exception handling log message: ")
+                println(STDERR, err)
+                println(STDERR, "  module=$module_  file=$filepath  line=$line")
             catch
             end
         end
