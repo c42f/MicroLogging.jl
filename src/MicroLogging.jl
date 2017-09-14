@@ -137,16 +137,15 @@ function logmsg_code(module_, file, line, level, message, exs...)
             k = ex.args[1]
             # Recognize several special keyword arguments
             if k == :id
-                if !isa(v, Expr) || v.head != :quote
-                    throw(ArgumentError("Message id should be a Symbol"))
-                end
                 # id may be overridden if you really want several log
                 # statements to share the same id (eg, several pertaining to
                 # the same progress step).
                 #
                 # TODO: Refine this - doing it as is, is probably a bad idea
                 # for consistency, and is hard to make unique between modules.
-                id = v
+                id = esc(v)
+            elseif k == :module_
+                module_ = esc(v)
             elseif k == :line
                 line = esc(v)
             elseif k == :file
@@ -206,9 +205,14 @@ function logmsg_code(module_, file, line, level, message, exs...)
             logstate = current_logstate()
             if std_level >= logstate.min_enabled_level
                 logger = logstate.logger
+                level = $level
+                module_ = $module_
+                file = $file
+                line = $line
+                id = $id
                 # Second chance at an early bail-out, based on arbitrary
                 # logger-specific logic.
-                if shouldlog(logger, $level, $module_, $file, $line, $id, $max_log, $progress)
+                if shouldlog(logger, level, module_, file, line, id, $max_log, $progress)
                     # Bind log record generation into a closure, allowing us to
                     # defer creation of the records until after filtering.
                     #
@@ -217,7 +221,7 @@ function logmsg_code(module_, file, line, level, message, exs...)
                         msg = $(esc(message))
                         logmsg(logger, level, msg, module_, filepath, line, id; $(kwargs...))
                     end
-                    dispatchmsg(logger, $level, $module_, $file, $line, $id, create_msg)
+                    dispatchmsg(logger, level, module_, file, line, id, create_msg)
                 end
             end
         end
