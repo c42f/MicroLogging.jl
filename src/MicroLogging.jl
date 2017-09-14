@@ -91,7 +91,7 @@ end
 
 LogState(logger) = LogState(LogLevel(min_enabled_level(logger)), logger)
 
-include("handlers.jl")
+include("loggers.jl")
 
 
 #-------------------------------------------------------------------------------
