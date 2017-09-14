@@ -16,8 +16,8 @@ export
     AbstractLogger,
     # Logger methods
     logmsg, shouldlog,
-    # Example logger
-    InteractiveLogger
+    # Example loggers
+    SimpleLogger, InteractiveLogger
 
 """
 A logger controls how log records are filtered and dispatched.  When a log
@@ -90,8 +90,6 @@ struct LogState
 end
 
 LogState(logger) = LogState(LogLevel(min_enabled_level(logger)), logger)
-
-include("loggers.jl")
 
 
 #-------------------------------------------------------------------------------
@@ -396,6 +394,7 @@ end
 
 
 #-------------------------------------------------------------------------------
+# Logger implementations
 """
     NullLogger()
 
@@ -407,10 +406,37 @@ min_enabled_level(::NullLogger) = NoLogs
 shouldlog(::NullLogger, a...) = false
 logmsg(::NullLogger, a...; kws...) = error("Null logger logmsg() should not be called")
 
+
+"""
+    SimpleLogger(stream=STDERR, min_level=Info)
+
+Simplistic logger for logging all messages with level not less than `min_level`
+to `stream`.
+"""
+struct SimpleLogger <: AbstractLogger
+    stream::IO
+    min_level::LogLevel
+end
+SimpleLogger(stream::IO=STDERR, level=Info) = SimpleLogger(stream, parse_level(level))
+
+function configure_logging(logger::SimpleLogger; min_level=Info)
+    SimpleLogger(logger.stream, parse_level(min_level))
+end
+
+shouldlog(logger::SimpleLogger, level, _...) = !(level < logger.min_level)
+
+min_enabled_level(logger::SimpleLogger) = logger.min_level
+
+function logmsg(logger::SimpleLogger, level, msg, module_, filepath, line, id;
+                progress=nothing, banner=false, kwargs...)
+    println(logger.stream, "$level [$(basename(String(filepath))):$line]: $msg")
+end
+
+
 #-------------------------------------------------------------------------------
 # Logger control and lookup
 
-_global_logstate = LogState(BelowMinLevel, NullLogger())  # See __init__
+_global_logstate = LogState(BelowMinLevel, NullLogger()) # See __init__
 
 """
     global_logger()
@@ -501,10 +527,13 @@ function disable_logging(level::LogLevel)
 end
 disable_logging(level) = disable_logging(parse_level(level))
 
+
 function __init__()
     # Need to set this in __init__, as it refers to STDERR
     global_logger(InteractiveLogger(STDERR))
 end
 
+
+include("loggers.jl")
 
 end

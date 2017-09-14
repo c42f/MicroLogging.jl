@@ -55,7 +55,7 @@ function some_operation()
     @info "Dispatches to the current task logger, or the global logger"
 end
 logstream = IOBuffer()
-with_logger(SimpleLogger(logstream, interactive_style=false)) do
+with_logger(SimpleLogger(logstream)) do
     @info "Logging redirected"
     some_operation()
 end
