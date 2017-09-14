@@ -1,25 +1,24 @@
 """
-    SimpleLogger(stream::IO; min_level=Info, interactive_style=isinteractive())
+    InteractiveLogger(stream::IO; min_level=Info))
 
-Simplistic logger for logging to a terminal or noninteractive stream, with
-basic per-level color support.
+Logger for logging to an interactive terminal, formatting logs in a readable
+way.
 """
-mutable struct SimpleLogger <: AbstractLogger
+mutable struct InteractiveLogger <: AbstractLogger
     stream::IO
     default_min_level::LogLevel
-    interactive_style::Bool
     prev_progress_key
     message_counts::Dict{Any,Int}
     module_limits::Dict{Module,LogLevel}
     blacklisted_ids::Set{Any}
 end
 
-function SimpleLogger(stream::IO; min_level=Info, interactive_style=isinteractive())
-    SimpleLogger(stream, min_level, interactive_style, nothing,
+function InteractiveLogger(stream::IO; min_level=Info)
+    InteractiveLogger(stream, min_level, nothing,
              Dict{Any,Int}(), Dict{Module,LogLevel}(), Set{Any}())
 end
 
-function configure_logging(logger::SimpleLogger, module_=nothing;
+function configure_logging(logger::InteractiveLogger, module_=nothing;
                            min_level=Info)
     min_level = parse_level(min_level)
     if module_ == nothing
@@ -32,7 +31,7 @@ function configure_logging(logger::SimpleLogger, module_=nothing;
     logger
 end
 
-function shouldlog(logger::SimpleLogger, level, module_, filepath, line, id, max_log, progress)
+function shouldlog(logger::InteractiveLogger, level, module_, filepath, line, id, max_log, progress)
     if level < get(logger.module_limits, module_, logger.default_min_level)
         return false
     end
@@ -45,7 +44,7 @@ function shouldlog(logger::SimpleLogger, level, module_, filepath, line, id, max
     return true
 end
 
-function min_enabled_level(logger::SimpleLogger)
+function min_enabled_level(logger::InteractiveLogger)
     min_level = logger.default_min_level
     for (_,level) ∈ logger.module_limits
         if level < min_level
@@ -56,16 +55,16 @@ function min_enabled_level(logger::SimpleLogger)
 end
 
 
-function formatmsg(logger::SimpleLogger, io, msg)
+function formatmsg(logger::InteractiveLogger, io, msg)
     print(io, msg)
 end
 
-function formatmsg(logger::SimpleLogger, io, ex_msg::Exception)
+function formatmsg(logger::InteractiveLogger, io, ex_msg::Exception)
     bt = catch_backtrace()
     showerror(io, ex_msg, bt; backtrace=!isempty(bt))
 end
 
-function formatmsg(logger::SimpleLogger, io, msg::Tuple)
+function formatmsg(logger::InteractiveLogger, io, msg::Tuple)
     foreach(msg) do m
         formatmsg(logger, io, m)
         write(io, '\n')
@@ -112,13 +111,13 @@ function levelstring(level::LogLevel)
     end
 end
 
-function logmsg(logger::SimpleLogger, level, msg, module_, filepath, line, id; kwargs...)
+function logmsg(logger::InteractiveLogger, level, msg, module_, filepath, line, id; kwargs...)
     io = IOBuffer()
     formatmsg(logger, io, msg)
     logmsg(logger, level, String(take!(io)), module_, filepath, line, id; kwargs...)
 end
 
-function logmsg(logger::SimpleLogger, level, msg::AbstractString, module_, filepath, line, id;
+function logmsg(logger::InteractiveLogger, level, msg::AbstractString, module_, filepath, line, id;
                 progress=nothing, banner=false, once=nothing, max_log=nothing, kwargs...)
     if max_log !== nothing
         count = get!(logger.message_counts, id, 0)
@@ -131,64 +130,57 @@ function logmsg(logger::SimpleLogger, level, msg::AbstractString, module_, filep
     end
     # Log printing
     filename = basename(filepath)
-    if logger.interactive_style
-        msgcolor, metacolor, bold = levelstyle(convert(LogLevel, level))
-        levelstr = levelstring(level)
-        # Attempt at avoiding the problem of distracting metadata in info log
-        # messages - print metadata to the right hand side.
-        metastr = "$filename:$line $levelstr"
-        msg = rstrip(msg, '\n')
-        if progress === nothing
-            if logger.prev_progress_key !== nothing
-                print(logger.stream, "\n")
+    msgcolor, metacolor, bold = levelstyle(convert(LogLevel, level))
+    levelstr = levelstring(level)
+    # Attempt at avoiding the problem of distracting metadata in info log
+    # messages - print metadata to the right hand side.
+    metastr = "$filename:$line $levelstr"
+    msg = rstrip(msg, '\n')
+    if progress === nothing
+        if logger.prev_progress_key !== nothing
+            print(logger.stream, "\n")
+        end
+        logger.prev_progress_key = nothing
+        msglines = split(msg, '\n')
+        color_lines = 1:length(msglines)
+        for (k,v) in kwargs
+            vallines = split(string(v), '\n')
+            push!(msglines, string("  ", k, " = ", vallines[1]))
+            for i in 2:length(vallines)
+                push!(msglines, "    "*vallines[i])
             end
-            logger.prev_progress_key = nothing
-            msglines = split(msg, '\n')
-            color_lines = 1:length(msglines)
-            for (k,v) in kwargs
-                vallines = split(string(v), '\n')
-                push!(msglines, string("  ", k, " = ", vallines[1]))
-                for i in 2:length(vallines)
-                    push!(msglines, "    "*vallines[i])
-                end
+        end
+        ncols = displaysize(logger.stream)[2]
+        if banner
+            unshift!(msglines, "-"^(ncols - length(metastr) - 1))
+            color_lines = color_lines .+ 1
+        end
+        for (i,msgline) in enumerate(msglines)
+            # TODO: This API is inconsistent between 0.5 & 0.6 - fix the bold stuff if possible.
+            if i in color_lines
+                print_with_color(msgcolor, logger.stream, msgline, bold=false)
+            else
+                print(logger.stream, msgline)
             end
-            ncols = displaysize(logger.stream)[2]
-            if banner
-                unshift!(msglines, "-"^(ncols - length(metastr) - 1))
-                color_lines = color_lines .+ 1
+            if i == 2
+                metastr = "..."
             end
-            for (i,msgline) in enumerate(msglines)
-                # TODO: This API is inconsistent between 0.5 & 0.6 - fix the bold stuff if possible.
-                if i in color_lines
-                    print_with_color(msgcolor, logger.stream, msgline, bold=false)
-                else
-                    print(logger.stream, msgline)
-                end
-                if i == 2
-                    metastr = "..."
-                end
-                nspace = max(1, ncols - (termlength(msgline) + length(metastr)))
-                print(logger.stream, " "^nspace)
-                print_with_color(metacolor, logger.stream, metastr, bold=bold)
-                print(logger.stream, "\n")
-            end
-        else
-            progress_key = msg
-            if logger.prev_progress_key !== nothing && logger.prev_progress_key != progress_key
-                print(logger.stream, "\n")
-            end
-            nbar = max(1, displaysize(logger.stream)[2] - (termlength(msg) + length(metastr)) - 4)
-            nfilledbar = round(Int, clamp(progress, 0, 1)*nbar)
-            msgbar = string("\r", msg, " [", "-"^nfilledbar, " "^(nbar - nfilledbar), "] ")
-            print(logger.stream, msgbar)
-            print_with_color(color, logger.stream, metastr, bold=bold)
-            logger.prev_progress_key = progress_key
+            nspace = max(1, ncols - (termlength(msgline) + length(metastr)))
+            print(logger.stream, " "^nspace)
+            print_with_color(metacolor, logger.stream, metastr, bold=bold)
+            print(logger.stream, "\n")
         end
     else
-        print(logger.stream, "$level [$module_:$filename:$line]: $msg")
-        if !endswith(msg, '\n')
-            print(logger.stream, '\n')
+        progress_key = msg
+        if logger.prev_progress_key !== nothing && logger.prev_progress_key != progress_key
+            print(logger.stream, "\n")
         end
+        nbar = max(1, displaysize(logger.stream)[2] - (termlength(msg) + length(metastr)) - 4)
+        nfilledbar = round(Int, clamp(progress, 0, 1)*nbar)
+        msgbar = string("\r", msg, " [", "-"^nfilledbar, " "^(nbar - nfilledbar), "] ")
+        print(logger.stream, msgbar)
+        print_with_color(color, logger.stream, metastr, bold=bold)
+        logger.prev_progress_key = progress_key
     end
 end
 

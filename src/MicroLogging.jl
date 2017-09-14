@@ -17,7 +17,7 @@ export
     # Logger methods
     logmsg, shouldlog,
     # Example logger
-    SimpleLogger
+    InteractiveLogger
 
 """
 A logger controls how log records are filtered and dispatched.  When a log
@@ -503,7 +503,7 @@ disable_logging(level) = disable_logging(parse_level(level))
 
 function __init__()
     # Need to set this in __init__, as it refers to STDERR
-    global_logger(SimpleLogger(STDERR))
+    global_logger(InteractiveLogger(STDERR))
 end
 
 
