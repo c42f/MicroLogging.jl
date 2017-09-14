@@ -179,7 +179,7 @@ function logmsg(logger::InteractiveLogger, level, msg::AbstractString, module_, 
         nfilledbar = round(Int, clamp(progress, 0, 1)*nbar)
         msgbar = string("\r", msg, " [", "-"^nfilledbar, " "^(nbar - nfilledbar), "] ")
         print(logger.stream, msgbar)
-        print_with_color(color, logger.stream, metastr, bold=bold)
+        print_with_color(metacolor, logger.stream, metastr, bold=bold)
         logger.prev_progress_key = progress_key
     end
 end
