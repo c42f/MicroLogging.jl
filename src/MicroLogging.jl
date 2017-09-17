@@ -198,12 +198,12 @@ function logmsg_code(module_, file, line, level, message, exs...)
         end
     end
     quote
-        std_level = convert(LogLevel, $level)
+        level = $level
+        std_level = convert(LogLevel, level)
         if std_level >= _min_enabled_level[]
             logstate = current_logstate()
             if std_level >= logstate.min_enabled_level
                 logger = logstate.logger
-                level = $level
                 module_ = $module_
                 file = $file
                 line = $line
