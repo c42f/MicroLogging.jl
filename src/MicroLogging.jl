@@ -49,7 +49,7 @@ const Debug         = LogLevel(-1000)
 const Info          = LogLevel(0)
 const Warn          = LogLevel(1000)
 const Error         = LogLevel(2000)
-const NoLogs        = LogLevel(typemax(Int32))
+const AboveMaxLevel = LogLevel(typemax(Int32))
 
 function Base.show(io::IO, level::LogLevel)
     if     level == BelowMinLevel  print(io, "BelowMinLevel")
@@ -57,7 +57,7 @@ function Base.show(io::IO, level::LogLevel)
     elseif level == Info           print(io, "Info")
     elseif level == Warn           print(io, "Warn")
     elseif level == Error          print(io, "Error")
-    elseif level == NoLogs         print(io, "NoLogs")
+    elseif level == AboveMaxLevel  print(io, "AboveMaxLevel")
     else                           print(io, "LogLevel($(level.level))")
     end
 end
@@ -70,7 +70,7 @@ function parse_level(level::Symbol)
     elseif  level == :info           return  Info
     elseif  level == :warn           return  Warn
     elseif  level == :error          return  Error
-    elseif  level == :nologs         return  NoLogs
+    elseif  level == :abovemaxlevel  return  AboveMaxLevel
     else
         throw(ArgumentError("Unknown log level $level"))
     end
@@ -402,7 +402,7 @@ Logger which disables all messages and produces no output
 """
 struct NullLogger <: AbstractLogger; end
 
-min_enabled_level(::NullLogger) = NoLogs
+min_enabled_level(::NullLogger) = AboveMaxLevel
 shouldlog(::NullLogger, a...) = false
 logmsg(::NullLogger, a...; kws...) = error("Null logger logmsg() should not be called")
 

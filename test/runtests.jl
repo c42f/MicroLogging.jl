@@ -1,6 +1,6 @@
 using MicroLogging
 using Base.Test
-import MicroLogging: LogLevel, BelowMinLevel, Debug, Info, Warn, Error, NoLogs
+import MicroLogging: LogLevel, BelowMinLevel, Debug, Info, Warn, Error, AboveMaxLevel
 
 if VERSION < v"0.6-"
     # Override Test.@test_broken, which is broken on julia-0.5!
