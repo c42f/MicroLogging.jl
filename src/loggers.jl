@@ -135,6 +135,7 @@ function logmsg(logger::InteractiveLogger, level, msg::AbstractString, module_, 
     # Attempt at avoiding the problem of distracting metadata in info log
     # messages - print metadata to the right hand side.
     metastr = "$filename:$line $levelstr"
+    lhsmeta = level >= Warn ? "$level: " : ""
     msg = rstrip(msg, '\n')
     if progress === nothing
         if logger.prev_progress_key !== nothing
@@ -157,7 +158,12 @@ function logmsg(logger::InteractiveLogger, level, msg::AbstractString, module_, 
         end
         for (i,msgline) in enumerate(msglines)
             # TODO: This API is inconsistent between 0.5 & 0.6 - fix the bold stuff if possible.
+            clearlhsmeta = false
             if i in color_lines
+                if !isempty(lhsmeta)
+                    print_with_color(msgcolor, logger.stream, lhsmeta, bold=true)
+                    clearlhsmeta = true
+                end
                 print_with_color(msgcolor, logger.stream, msgline, bold=false)
             else
                 print(logger.stream, msgline)
@@ -165,10 +171,13 @@ function logmsg(logger::InteractiveLogger, level, msg::AbstractString, module_, 
             if i == 2
                 metastr = "..."
             end
-            nspace = max(1, ncols - (termlength(msgline) + length(metastr)))
+            nspace = max(1, ncols - (termlength(msgline) + length(metastr) + length(lhsmeta)))
             print(logger.stream, " "^nspace)
             print_with_color(metacolor, logger.stream, metastr, bold=bold)
             print(logger.stream, "\n")
+            if clearlhsmeta
+                lhsmeta = ""
+            end
         end
     else
         progress_key = msg
