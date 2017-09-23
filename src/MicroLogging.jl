@@ -125,6 +125,7 @@ function logmsg_code(module_, file, line, level, message, exs...)
     # Generate a unique message id by default
     messagetemplate = string(message)
     id = Expr(:quote, log_record_id(module_, level, messagetemplate))
+    group = Expr(:quote, Symbol(splitext(basename(file))[1]))
     kwargs = Any[]
     for ex in exs
         if isexpr(ex, :(=)) && isa(ex.args[1], Symbol)
@@ -148,6 +149,8 @@ function logmsg_code(module_, file, line, level, message, exs...)
                 line = esc(v)
             elseif k == :file
                 file = esc(v)
+            elseif k == :group
+                group = esc(v)
             else
                 v = esc(v)
                 # The following keywords are recognized for early filtering, to
@@ -197,6 +200,8 @@ function logmsg_code(module_, file, line, level, message, exs...)
             push!(kwargs, Expr(:kw, Symbol(ex), esc(ex)))
         end
     end
+    # TODO: Consider communicating group via shouldlog
+    push!(kwargs, Expr(:kw, :group, group))
     quote
         level = $level
         std_level = convert(LogLevel, level)
