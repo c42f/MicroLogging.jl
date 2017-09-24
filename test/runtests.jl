@@ -21,17 +21,20 @@ mutable struct LogRecord
     file
     line
     kwargs
+    shouldlog_args
 end
 
 LogRecord(args...; kwargs...) = LogRecord(args..., kwargs)
-LogRecord(level, msg, _module=nothing, group=nothing, id=nothing, file=nothing, line=nothing; kwargs...) = LogRecord(level, msg, _module, group, id, file, line, kwargs)
+LogRecord(level, msg, _module=nothing, group=nothing, id=nothing, file=nothing, line=nothing; kwargs...) =
+	LogRecord(level, msg, _module, group, id, file, line, kwargs, nothing)
 
 mutable struct TestLogger <: AbstractLogger
     records::Vector{LogRecord}
     min_level::LogLevel
+    shouldlog_args
 end
 
-TestLogger(min_level=BelowMinLevel) = TestLogger(LogRecord[], min_level)
+TestLogger(min_level=BelowMinLevel) = TestLogger(LogRecord[], min_level, nothing)
 
 MicroLogging.min_enabled_level(logger::TestLogger) = logger.min_level
 
@@ -41,12 +44,14 @@ function MicroLogging.configure_logging(logger::TestLogger; min_level=Info)
 end
 
 function MicroLogging.shouldlog(logger::TestLogger, level, _module, group, id)
+    logger.shouldlog_args = (level, _module, group, id)
     true
 end
 
 function MicroLogging.dispatch_message(logger::TestLogger, level, msg, _module,
                                        group, id, file, line; kwargs...)
-    push!(logger.records, LogRecord(level, msg, _module, group, id, file, line, kwargs))
+    push!(logger.records, LogRecord(level, msg, _module, group, id, file, line,
+                                    kwargs, logger.shouldlog_args))
 end
 
 function collect_logs(f::Function, min_level=BelowMinLevel)
@@ -190,8 +195,11 @@ end
     @test record.id == :asdf
     @test record.file == "/a/file"
     @test record.line == -10
-    # TODO: More testing here, for interaction of special keywords with the
-    # shouldlog() function.
+    # Test consistency with shouldlog() function arguments
+    @test record.level   == record.shouldlog_args[1]
+    @test record._module == record.shouldlog_args[2]
+    @test record.group   == record.shouldlog_args[3]
+    @test record.id      == record.shouldlog_args[4]
 end
 
 
