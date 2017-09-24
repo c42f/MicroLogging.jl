@@ -15,15 +15,16 @@ end
 mutable struct LogRecord
     level
     message
-    module_
-    filepath
-    line
+    _module
+    group
     id
+    file
+    line
     kwargs
 end
 
 LogRecord(args...; kwargs...) = LogRecord(args..., kwargs)
-LogRecord(level, msg, module_=nothing, filepath=nothing, line=nothing, id=nothing; kwargs...) = LogRecord(level, msg, module_, filepath, line, id, kwargs)
+LogRecord(level, msg, _module=nothing, group=nothing, id=nothing, file=nothing, line=nothing; kwargs...) = LogRecord(level, msg, _module, group, id, file, line, kwargs)
 
 mutable struct TestLogger <: AbstractLogger
     records::Vector{LogRecord}
@@ -39,12 +40,13 @@ function MicroLogging.configure_logging(logger::TestLogger; min_level=Info)
     logger
 end
 
-function MicroLogging.shouldlog(logger::TestLogger, level, module_, filepath, line, id, max_log, progress)
+function MicroLogging.shouldlog(logger::TestLogger, level, _module, group, id)
     true
 end
 
-function MicroLogging.logmsg(logger::TestLogger, level, msg, module_, filepath, line, id; kwargs...)
-    push!(logger.records, LogRecord(level, msg, module_, filepath, line, id, kwargs))
+function MicroLogging.dispatch_message(logger::TestLogger, level, msg, _module,
+                                       group, id, file, line; kwargs...)
+    push!(logger.records, LogRecord(level, msg, _module, group, id, file, line, kwargs))
 end
 
 function collect_logs(f::Function, min_level=BelowMinLevel)
@@ -63,10 +65,11 @@ end
 
 function record_matches(r, ref::LogRecord)
     (r.level, r.message) == (ref.level, ref.message)        || return false
-    (ref.module_  == nothing || r.module_  == ref.module_)  || return false
-    (ref.filepath == nothing || r.filepath == ref.filepath) || return false
-    (ref.line     == nothing || r.line     == ref.line)     || return false
+    (ref._module  == nothing || r._module  == ref._module)  || return false
+    (ref.group    == nothing || r.group    == ref.group)    || return false
     (ref.id       == nothing || r.id       == ref.id)       || return false
+    (ref.file     == nothing || r.file     == ref.file) || return false
+    (ref.line     == nothing || r.line     == ref.line)     || return false
     rkw = Dict(r.kwargs)
     for (k,v) in ref.kwargs
         (haskey(rkw, k) && rkw[k] == v) || return false
@@ -146,8 +149,8 @@ end
     kwargs = Dict(record.kwargs)
 
     # Builtin metadata
-    @test record.module_ == Main
-    @test record.filepath == Base.source_path()
+    @test record._module == Main
+    @test record.file == Base.source_path()
     if Compat.macros_have_sourceloc # See #1
         @test record.line == kwargs[:real_line]
     end
@@ -178,11 +181,15 @@ end
 
 @testset "Special keywords" begin
     logs = collect_logs() do
-        @info "foo" id=:asdf
+        @info "foo" _module=MicroLogging _id=:asdf _group=:somegroup _file="/a/file" _line=-10
     end
     @test length(logs) == 1
     record = logs[1]
+    @test record._module == MicroLogging
+    @test record.group == :somegroup
     @test record.id == :asdf
+    @test record.file == "/a/file"
+    @test record.line == -10
     # TODO: More testing here, for interaction of special keywords with the
     # shouldlog() function.
 end

@@ -15,7 +15,7 @@ export
     # Logger type
     AbstractLogger,
     # Logger methods
-    logmsg, shouldlog,
+    dispatch_message, shouldlog,
     # Example loggers
     SimpleLogger, InteractiveLogger
 
@@ -106,10 +106,10 @@ _log_record_ids = Set{Symbol}()
 # source location in the originating module, but should be stable across
 # versions of the originating module, provided the log generating statement
 # itself doesn't change.
-function log_record_id(module_, level, message_ex)
-    h = hash(string(module_, level, message_ex)) % ((1<<24) - 1000)
+function log_record_id(_module, level, message_ex)
+    h = hash(string(_module, level, message_ex)) % ((1<<24) - 1000)
     while true
-        id = Symbol(@sprintf("%s_%06x", replace(string(module_), '.', '_'), h))
+        id = Symbol(@sprintf("%s_%06x", replace(string(_module), '.', '_'), h))
         if !(id in _log_record_ids)
             push!(_log_record_ids, id)
             return id
@@ -119,12 +119,10 @@ function log_record_id(module_, level, message_ex)
 end
 
 # Generate code for @logmsg
-function logmsg_code(module_, file, line, level, message, exs...)
-    progress = nothing
-    max_log = nothing
+function logmsg_code(_module, file, line, level, message, exs...)
     # Generate a unique message id by default
     messagetemplate = string(message)
-    id = Expr(:quote, log_record_id(module_, level, messagetemplate))
+    id = Expr(:quote, log_record_id(_module, level, messagetemplate))
     group = Expr(:quote, Symbol(splitext(basename(file))[1]))
     kwargs = Any[]
     for ex in exs
@@ -135,7 +133,7 @@ function logmsg_code(module_, file, line, level, message, exs...)
             end
             k = ex.args[1]
             # Recognize several special keyword arguments
-            if k == :id
+            if k == :_id
                 # id may be overridden if you really want several log
                 # statements to share the same id (eg, several pertaining to
                 # the same progress step).
@@ -143,27 +141,16 @@ function logmsg_code(module_, file, line, level, message, exs...)
                 # TODO: Refine this - doing it as is, is probably a bad idea
                 # for consistency, and is hard to make unique between modules.
                 id = esc(v)
-            elseif k == :module_
-                module_ = esc(v)
-            elseif k == :line
+            elseif k == :_module
+                _module = esc(v)
+            elseif k == :_line
                 line = esc(v)
-            elseif k == :file
+            elseif k == :_file
                 file = esc(v)
-            elseif k == :group
+            elseif k == :_group
                 group = esc(v)
             else
                 v = esc(v)
-                # The following keywords are recognized for early filtering, to
-                # throttle logging as early as possible.
-                #
-                # TODO: Decide whether passing these to shouldlog() is actually
-                # a good idea.  Keywords for this would be a lot better but the
-                # performance hit is painful.
-                if k == :max_log
-                    max_log = v
-                elseif k == :progress
-                    progress = v
-                end
                 # Copy across key value pairs for structured log records
                 push!(kwargs, Expr(:kw, k, v))
             end
@@ -200,8 +187,6 @@ function logmsg_code(module_, file, line, level, message, exs...)
             push!(kwargs, Expr(:kw, Symbol(ex), esc(ex)))
         end
     end
-    # TODO: Consider communicating group via shouldlog
-    push!(kwargs, Expr(:kw, :group, group))
     quote
         level = $level
         std_level = convert(LogLevel, level)
@@ -209,22 +194,23 @@ function logmsg_code(module_, file, line, level, message, exs...)
             logstate = current_logstate()
             if std_level >= logstate.min_enabled_level
                 logger = logstate.logger
-                module_ = $module_
-                file = $file
-                line = $line
+                _module = $_module
                 id = $id
+                group = $group
                 # Second chance at an early bail-out, based on arbitrary
                 # logger-specific logic.
-                if shouldlog(logger, level, module_, file, line, id, $max_log, $progress)
+                if shouldlog(logger, level, _module, group, id)
                     # Bind log record generation into a closure, allowing us to
                     # defer creation of the records until after filtering.
                     #
                     # Use FastClosures.@closure to work around https://github.com/JuliaLang/julia/issues/15276
-                    create_msg = @closure function cm(logger, level, module_, filepath, line, id)
+                    create_msg = @closure function cm(logger, level, _module, group, id, file, line)
                         msg = $(esc(message))
-                        logmsg(logger, level, msg, module_, filepath, line, id; $(kwargs...))
+                        dispatch_message(logger, level, msg, _module, group, id, file, line; $(kwargs...))
                     end
-                    dispatchmsg(logger, level, module_, file, line, id, create_msg)
+                    file = $file
+                    line = $line
+                    gen_message(logger, level, _module, group, id, file, line, create_msg)
                 end
             end
         end
@@ -333,29 +319,23 @@ macro error(message, exs...) logmsg_code((@sourceinfo)..., :Error, message, exs.
 
 
 """
-    logmsg(logger, level, message, module_, filepath, line, id; key1=val1, ...)
+    dispatch_message(logger, level, message, _module, group, id, file, line; key1=val1, ...)
 
-Log a message to `logger` at `level`.  The location at which the message was
-generated is given by `module_`, `filepath` and `line`. `id` is an arbitrary
-unique `Symbol` to be used as a key to identify the log statement when
-filtering.
+Log a message to `logger` at `level`.  The logicla location at which the
+message was generated is given by module `_module` and `group`; the source
+location by `file` and `line`. `id` is an arbitrary unique `Symbol` to be used
+as a key to identify the log statement when filtering.
 """
-function logmsg end
+function dispatch_message end
 
 
 """
-    shouldlog(logger, level, module_, filepath, line, id, max_log, progress)
+    shouldlog(logger, level, _module, group, id)
 
-Return true when `logger` accepts a message at `level`, generated at source
-location (`module_`,`filepath`,`line`) with unique log identifier `id`.
-Additional log control hints supplied at the log site are `max_log` and
-`progress` (see `@logmsg`), which are passed in here to allow for efficient log
-filtering.
+Return true when `logger` accepts a message at `level`, generated for
+`_module`, `group` and with unique log identifier `id`.
 """
-function shouldlog(logger::AbstractLogger, level, module_,
-                   filepath, line, id, max_log, progress)
-    true
-end
+shouldlog(::AbstractLogger, _...) = true
 
 
 """
@@ -367,7 +347,7 @@ the log level below or equal to which all messages are filtered.
 min_enabled_level(logger::AbstractLogger) = Info
 
 
-function dispatchmsg(logger, level, module_, filepath, line, id, create_msg)
+function gen_message(logger, level, _module, group, id, filepath, line, create_msg)
     # Catch all exceptions, to prevent log message generation from crashing
     # the program.  This lets users confidently toggle little-used
     # functionality - such as debug logging - in a production system.
@@ -375,21 +355,20 @@ function dispatchmsg(logger, level, module_, filepath, line, id, create_msg)
     # Users need to override and disable this if they want to use logging
     # as an audit trail.
     try
-        # TODO: Should we condition types here???
-        create_msg(logger, level, module_, String(filepath), line, id)
+        create_msg(logger, level, _module, group, id, filepath, line)
     catch err
         # Try really hard to get the message to the logger, with
         # progressively less information.
         try
-            msg = ("Error formatting log message at location ($module_,$filepath,$line).", err)
-            logmsg(logger, Error, msg, module_, filepath, line, id)
+            msg = ("Error formatting log message at location ($_module,$filepath,$line).", err)
+            dispatch_message(logger, Error, msg, _module, group, id, filepath, line)
         catch
             try
                 # Give up and write to STDERR, in three independent calls to
                 # increase the odds of it getting through.
                 print(STDERR, "Exception handling log message: ")
                 println(STDERR, err)
-                println(STDERR, "  module=$module_  file=$filepath  line=$line")
+                println(STDERR, "  module=$_module  file=$filepath  line=$line")
             catch
             end
         end
@@ -408,8 +387,8 @@ Logger which disables all messages and produces no output
 struct NullLogger <: AbstractLogger; end
 
 min_enabled_level(::NullLogger) = AboveMaxLevel
-shouldlog(::NullLogger, a...) = false
-logmsg(::NullLogger, a...; kws...) = error("Null logger logmsg() should not be called")
+shouldlog(::NullLogger, _...) = false
+dispatch_message(::NullLogger, _...; __...) = error("Null logger dispatch_message() should not be called")
 
 
 """
@@ -432,8 +411,8 @@ shouldlog(logger::SimpleLogger, level, _...) = !(level < logger.min_level)
 
 min_enabled_level(logger::SimpleLogger) = logger.min_level
 
-function logmsg(logger::SimpleLogger, level, msg, module_, filepath, line, id;
-                progress=nothing, banner=false, kwargs...)
+function dispatch_message(logger::SimpleLogger, level, msg, _module, group, id,
+                          filepath, line; __...)
     println(logger.stream, "$level [$(basename(String(filepath))):$line]: $msg")
 end
 
@@ -518,7 +497,7 @@ function configure_logging(args...; kwargs...)
     logger
 end
 
-configure_logging(::AbstractLogger, args...; kwargs...) = throw(ArgumentError("No configure_logging method matches the provided arguments."))
+configure_logging(::AbstractLogger, _...; __...) = throw(ArgumentError("No configure_logging method matches the provided arguments."))
 
 """
     disable_logging(level)

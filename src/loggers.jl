@@ -18,28 +18,25 @@ function InteractiveLogger(stream::IO; min_level=Info)
              Dict{Any,Int}(), Dict{Module,LogLevel}(), Set{Any}())
 end
 
-function configure_logging(logger::InteractiveLogger, module_=nothing;
+function configure_logging(logger::InteractiveLogger, _module=nothing;
                            min_level=Info)
     min_level = parse_level(min_level)
-    if module_ == nothing
+    if _module == nothing
         empty!(logger.module_limits)
         logger.default_min_level = min_level
     else
         # Per-module log limiting
-        logger.module_limits[module_] = min_level
+        logger.module_limits[_module] = min_level
     end
     logger
 end
 
-function shouldlog(logger::InteractiveLogger, level, module_, filepath, line, id, max_log, progress)
-    if level < get(logger.module_limits, module_, logger.default_min_level)
+function shouldlog(logger::InteractiveLogger, level, _module, group, id)
+    if level < get(logger.module_limits, _module, logger.default_min_level)
         return false
     end
     if id in logger.blacklisted_ids
         return false
-    end
-    if progress !== nothing
-        # TODO: progress throttling?
     end
     return true
 end
@@ -111,14 +108,18 @@ function levelstring(level::LogLevel)
     end
 end
 
-function logmsg(logger::InteractiveLogger, level, msg, module_, filepath, line, id; kwargs...)
+function dispatch_message(logger::InteractiveLogger, level, msg, _module, group,
+                          id, file, line; kwargs...)
     io = IOBuffer()
     formatmsg(logger, io, msg)
-    logmsg(logger, level, String(take!(io)), module_, filepath, line, id; kwargs...)
+    dispatch_message(logger, level, String(take!(io)), _module, group, id,
+                     file, line; kwargs...)
 end
 
-function logmsg(logger::InteractiveLogger, level, msg::AbstractString, module_, filepath, line, id;
-                progress=nothing, banner=false, once=nothing, max_log=nothing, kwargs...)
+function dispatch_message(logger::InteractiveLogger, level, msg::AbstractString,
+                          _module, group, id, filepath, line;
+                          progress=nothing, banner=false, once=nothing,
+                          max_log=nothing, kwargs...)
     if max_log !== nothing
         count = get!(logger.message_counts, id, 0)
         count += 1
@@ -128,6 +129,7 @@ function logmsg(logger::InteractiveLogger, level, msg::AbstractString, module_, 
             return
         end
     end
+    # TODO: progress throttling?
     # Log printing
     filename = basename(filepath)
     msgcolor, metacolor, bold = levelstyle(convert(LogLevel, level))
