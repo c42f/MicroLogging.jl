@@ -12,10 +12,10 @@ using Memento
 immutable LogShim <: AbstractLogger
 end
 
-function MicroLogging.logmsg(::LogShim, ml_level, msg, module_, filepath, line, id; kwargs...)
+function MicroLogging.dispatch_message(::LogShim, ml_level, msg, _module, group, id, filepath, line; kwargs...)
     # TODO: Map the `group` keyword (or something equivalent) into the right logger.
     # For now, assume a module-based logger.
-    logger = get_logger(module_)
+    logger = get_logger(_module)
 
     if     ml_level == MicroLogging.Debug ; level = "debug"
     elseif ml_level == MicroLogging.Info  ; level = "info"
@@ -26,11 +26,6 @@ function MicroLogging.logmsg(::LogShim, ml_level, msg, module_, filepath, line, 
     # TODO: Capture all the keyword arguments, and other call site metadata
     rec = logger.record(logger.name, level, logger.levels[level], msg)
     @sync log(logger, rec)
-end
-
-function MicroLogging.shouldlog(::LogShim, ml_level, module_, filepath, line, id, max_log, progress)
-    # TODO - implement early out filtering for efficiency
-    true
 end
 
 end
