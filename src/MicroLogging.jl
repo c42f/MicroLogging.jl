@@ -335,7 +335,7 @@ function dispatch_message end
 Return true when `logger` accepts a message at `level`, generated for
 `_module`, `group` and with unique log identifier `id`.
 """
-shouldlog(::AbstractLogger, _...) = true
+shouldlog(::AbstractLogger, args...) = true
 
 
 """
@@ -387,8 +387,8 @@ Logger which disables all messages and produces no output
 struct NullLogger <: AbstractLogger; end
 
 min_enabled_level(::NullLogger) = AboveMaxLevel
-shouldlog(::NullLogger, _...) = false
-dispatch_message(::NullLogger, _...; __...) = error("Null logger dispatch_message() should not be called")
+shouldlog(::NullLogger, args...) = false
+dispatch_message(::NullLogger, args...; kwargs...) = error("Null logger dispatch_message() should not be called")
 
 
 """
@@ -407,12 +407,12 @@ function configure_logging(logger::SimpleLogger; min_level=Info)
     SimpleLogger(logger.stream, parse_level(min_level))
 end
 
-shouldlog(logger::SimpleLogger, level, _...) = !(level < logger.min_level)
+shouldlog(logger::SimpleLogger, level, args...) = !(level < logger.min_level)
 
 min_enabled_level(logger::SimpleLogger) = logger.min_level
 
 function dispatch_message(logger::SimpleLogger, level, msg, _module, group, id,
-                          filepath, line; __...)
+                          filepath, line; kwargs...)
     println(logger.stream, "$level [$(basename(String(filepath))):$line]: $msg")
 end
 
@@ -497,7 +497,7 @@ function configure_logging(args...; kwargs...)
     logger
 end
 
-configure_logging(::AbstractLogger, _...; __...) = throw(ArgumentError("No configure_logging method matches the provided arguments."))
+configure_logging(::AbstractLogger, args...; kwargs...) = throw(ArgumentError("No configure_logging method matches the provided arguments."))
 
 """
     disable_logging(level)
