@@ -107,9 +107,13 @@ _log_record_ids = Set{Symbol}()
 # versions of the originating module, provided the log generating statement
 # itself doesn't change.
 function log_record_id(_module, level, message_ex)
-    h = hash(string(_module, level, message_ex)) % ((1<<24) - 1000)
+    modname = join(fullname(_module), "_")
+    if VERSION < v"0.7.0-DEV.1877" && isempty(modname)
+        modname = "Main"
+    end
+    h = hash(string(modname, level, message_ex)) % ((1<<24) - 1000)
     while true
-        id = Symbol(@sprintf("%s_%06x", replace(string(_module), '.', '_'), h))
+        id = Symbol(@sprintf("%s_%06x", modname, h))
         if !(id in _log_record_ids)
             push!(_log_record_ids, id)
             return id
