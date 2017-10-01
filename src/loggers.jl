@@ -131,7 +131,7 @@ function handle_message(logger::InteractiveLogger, level, msg::AbstractString,
     end
     # TODO: progress throttling?
     # Log printing
-    filename = basename(filepath)
+    filename = basename(String(filepath))
     msgcolor, metacolor, bold = levelstyle(convert(LogLevel, level))
     levelstr = levelstring(level)
     # Attempt at avoiding the problem of distracting metadata in info log
