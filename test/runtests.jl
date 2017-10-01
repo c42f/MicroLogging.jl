@@ -48,8 +48,8 @@ function MicroLogging.shouldlog(logger::TestLogger, level, _module, group, id)
     true
 end
 
-function MicroLogging.dispatch_message(logger::TestLogger, level, msg, _module,
-                                       group, id, file, line; kwargs...)
+function MicroLogging.handle_message(logger::TestLogger, level, msg, _module,
+                                     group, id, file, line; kwargs...)
     push!(logger.records, LogRecord(level, msg, _module, group, id, file, line,
                                     kwargs, logger.shouldlog_args))
 end

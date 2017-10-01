@@ -108,18 +108,18 @@ function levelstring(level::LogLevel)
     end
 end
 
-function dispatch_message(logger::InteractiveLogger, level, msg, _module, group,
-                          id, file, line; kwargs...)
+function handle_message(logger::InteractiveLogger, level, msg, _module, group,
+                        id, file, line; kwargs...)
     io = IOBuffer()
     formatmsg(logger, io, msg)
-    dispatch_message(logger, level, String(take!(io)), _module, group, id,
-                     file, line; kwargs...)
+    handle_message(logger, level, String(take!(io)), _module, group, id,
+                   file, line; kwargs...)
 end
 
-function dispatch_message(logger::InteractiveLogger, level, msg::AbstractString,
-                          _module, group, id, filepath, line;
-                          progress=nothing, banner=false, once=nothing,
-                          max_log=nothing, kwargs...)
+function handle_message(logger::InteractiveLogger, level, msg::AbstractString,
+                        _module, group, id, filepath, line;
+                        progress=nothing, banner=false, once=nothing,
+                        max_log=nothing, kwargs...)
     if max_log !== nothing
         count = get!(logger.message_counts, id, 0)
         count += 1

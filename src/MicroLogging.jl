@@ -15,7 +15,7 @@ export
     # Logger type
     AbstractLogger,
     # Logger methods
-    dispatch_message, shouldlog,
+    handle_message, shouldlog,
     # Example loggers
     SimpleLogger, InteractiveLogger
 
@@ -210,11 +210,11 @@ function logmsg_code(_module, file, line, level, message, exs...)
                     # Use FastClosures.@closure to work around https://github.com/JuliaLang/julia/issues/15276
                     create_msg = @closure function cm(logger, level, _module, group, id, file, line)
                         msg = $(esc(message))
-                        dispatch_message(logger, level, msg, _module, group, id, file, line; $(kwargs...))
+                        handle_message(logger, level, msg, _module, group, id, file, line; $(kwargs...))
                     end
                     file = $file
                     line = $line
-                    gen_message(logger, level, _module, group, id, file, line, create_msg)
+                    dispatch_message(logger, level, _module, group, id, file, line, create_msg)
                 end
             end
         end
@@ -323,14 +323,14 @@ macro error(message, exs...) logmsg_code((@sourceinfo)..., :Error, message, exs.
 
 
 """
-    dispatch_message(logger, level, message, _module, group, id, file, line; key1=val1, ...)
+    handle_message(logger, level, message, _module, group, id, file, line; key1=val1, ...)
 
 Log a message to `logger` at `level`.  The logicla location at which the
 message was generated is given by module `_module` and `group`; the source
 location by `file` and `line`. `id` is an arbitrary unique `Symbol` to be used
 as a key to identify the log statement when filtering.
 """
-function dispatch_message end
+function handle_message end
 
 
 """
@@ -351,7 +351,7 @@ the log level below or equal to which all messages are filtered.
 min_enabled_level(logger::AbstractLogger) = Info
 
 
-function gen_message(logger, level, _module, group, id, filepath, line, create_msg)
+function dispatch_message(logger, level, _module, group, id, filepath, line, create_msg)
     # Catch all exceptions, to prevent log message generation from crashing
     # the program.  This lets users confidently toggle little-used
     # functionality - such as debug logging - in a production system.
@@ -365,7 +365,7 @@ function gen_message(logger, level, _module, group, id, filepath, line, create_m
         # progressively less information.
         try
             msg = ("Error formatting log message at location ($_module,$filepath,$line).", err)
-            dispatch_message(logger, Error, msg, _module, group, id, filepath, line)
+            handle_message(logger, Error, msg, _module, group, id, filepath, line)
         catch
             try
                 # Give up and write to STDERR, in three independent calls to
@@ -392,7 +392,7 @@ struct NullLogger <: AbstractLogger; end
 
 min_enabled_level(::NullLogger) = AboveMaxLevel
 shouldlog(::NullLogger, args...) = false
-dispatch_message(::NullLogger, args...; kwargs...) = error("Null logger dispatch_message() should not be called")
+handle_message(::NullLogger, args...; kwargs...) = error("Null logger handle_message() should not be called")
 
 
 """
@@ -415,8 +415,8 @@ shouldlog(logger::SimpleLogger, level, args...) = !(level < logger.min_level)
 
 min_enabled_level(logger::SimpleLogger) = logger.min_level
 
-function dispatch_message(logger::SimpleLogger, level, msg, _module, group, id,
-                          filepath, line; kwargs...)
+function handle_message(logger::SimpleLogger, level, msg, _module, group, id,
+                        filepath, line; kwargs...)
     println(logger.stream, "$level [$(basename(String(filepath))):$line]: $msg")
 end
 

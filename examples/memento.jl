@@ -12,7 +12,7 @@ using Memento
 immutable LogShim <: AbstractLogger
 end
 
-function MicroLogging.dispatch_message(::LogShim, ml_level, msg, _module, group, id, filepath, line; kwargs...)
+function MicroLogging.handle_message(::LogShim, ml_level, msg, _module, group, id, filepath, line; kwargs...)
     # TODO: Map the `group` keyword (or something equivalent) into the right logger.
     # For now, assume a module-based logger.
     logger = get_logger(_module)
