@@ -2,55 +2,40 @@ using MicroLogging
 using Compat
 
 
-@info "Simple logging" banner=true
+@info "# Simple logging"
 @info "Default level is info"
 @debug "I am an invisible debug message"
-@info """
-A big log
-message in a
-multi line string
-"""
-@info "Non-strings may be logged as messages:"
-@info reshape(1:16, (4,4))
+
+x = [1 2;3 4]
+@info "Support for key value pairs" x a=1 b="asdf"
+
 try
     1÷0
 catch err
-    @info "An error logged as the message:"
-    @error err
+    @error "Formatting of exceptions",err
 end
 
 
-@info "Early filtering of logs, for efficiency" banner=true
+@info "# Early filtering of logs, for efficiency"
 @debug begin
     error("Should not be executed")
     "This message is never generated"
 end
 configure_logging(min_level=:debug)
 @debug "Logging enabled at debug level and above"
-@info "Log suppression with `max_log`" banner=true
-for i=1:20
-    if i > 7
-        @warn "i=$i out of bounds (set max_log=2)" max_log=2
-        continue
-    end
-    @info "The value of (1+i) is $(1+i)"
+for i=1:10
+    @warn "Log suppression iteration $i (max_log=2)" max_log=2
 end
 
 
-@info "Simple progress logging" banner=true
+@info "# Simple progress logging"
 for i=1:100
     sleep(0.01)
-    i%40 != 0 || @warn "foo"
     @info "algorithm1" progress=i/100
 end
-@debug "Progress logging also at debug (or any) log level"
-for i=1:100
-    sleep(0.01)
-    @debug "algorithm2" progress=i/100
-end
 
 
-@info "Task-based log dispatch using dynamic scoping" banner=true
+@info "# Task-based log dispatch using dynamic scoping"
 function some_operation()
     @info "Dispatches to the current task logger, or the global logger"
 end
@@ -67,20 +52,23 @@ $(strip(String(take!(logstream))))
 """
 
 
-@info "Formatting logs can't crash the application" banner=true
-@info "The next log line will report an exception:"
+@info "# Formatting logs can't crash the application"
 @info "1÷0 = $(1÷0)"
-@info "... and we get to the next line without a catch"
+
+@error """
+       Multiline messages      | 11.1
+       are readably justified  | 22.2
+       """
 
 
-@info "Logging may be completely disabled below a given level, per module" banner=true
+@info "# Logging may be completely disabled below a given level, per module"
 module LogTest
     using MicroLogging
     function f(x)
-        @debug "a LogTest module debug message $x"
-        @info  "a LogTest module info message $x"
-        @warn  "a LogTest module warning message $x"
-        @error "a LogTest module error message $x"
+        @debug "A LogTest module debug message $x"
+        @info  "A LogTest module info message $x"
+        @warn  "A LogTest module warning message $x"
+        @error "A LogTest module error message $x"
     end
     module SubModule
         using MicroLogging
