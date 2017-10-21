@@ -112,7 +112,8 @@ function print_log_line(stream, lhs, message, rhs,
     print(stream, " ")
     padwidth = max(0, width - (termlength(message) + 1 +
                                length(lhs) + length(rhs)))
-    padstr = padchar^padwidth
+    # Workaround for ^(::Char, ::Int) bugs in 0.6
+    padstr = padwidth == 0 ? "" : padwidth == 1 ? padchar : padchar^padwidth
     if emphasize
         print_with_color(color, stream, padstr, bold=false)
     else

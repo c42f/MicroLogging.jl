@@ -1,6 +1,4 @@
 using MicroLogging
-using Compat
-
 
 @info "# Simple logging"
 @info "Default level is info"

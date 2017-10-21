@@ -364,15 +364,16 @@ function dispatch_message(logger, level, _module, group, id, filepath, line, cre
         # Try really hard to get the message to the logger, with
         # progressively less information.
         try
-            msg = ("Error formatting log message at location ($_module,$filepath,$line).", err)
+            msg = ("Failed to generate log record in module $_module at $filepath:$line",err)
             handle_message(logger, Error, msg, _module, group, id, filepath, line)
-        catch
+        catch err2
             try
                 # Give up and write to STDERR, in three independent calls to
                 # increase the odds of it getting through.
                 print(STDERR, "Exception handling log message: ")
                 println(STDERR, err)
                 println(STDERR, "  module=$_module  file=$filepath  line=$line")
+                println(STDERR, "  Second exception: ", err2)
             catch
             end
         end
