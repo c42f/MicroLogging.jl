@@ -1,38 +1,46 @@
 using MicroLogging
 
-@info "# Simple logging"
-@info "Default level is info"
-@debug "I am an invisible debug message"
-
+@info "# Logging macros"
+@debug "A message for debugging (filtered out by default)"
+@info "Information about normal program operation"
+@warn "A potentially problem was detected"
+@error "Something definitely went wrong"
 x = [1 2;3 4]
 @info "Support for key value pairs" x a=1 b="asdf"
 
-try
-    1÷0
-catch err
-    @error "Formatting of exceptions",err
+#-------------------------------------------------------------------------------
+@info "# Progress logging"
+for i=1:100
+    sleep(0.01)
+    @info "algorithm1" progress=i/100
 end
 
-
-@info "# Early filtering of logs, for efficiency"
+#-------------------------------------------------------------------------------
+@info "# Log record filtering"
 @debug begin
-    error("Should not be executed")
-    "This message is never generated"
+    error("Should not be executed unless logging at debug level")
+    "A message"
 end
 configure_logging(min_level=:debug)
 @debug "Logging enabled at debug level and above"
 for i=1:10
     @warn "Log suppression iteration $i (max_log=2)" max_log=2
 end
-
-
-@info "# Simple progress logging"
-for i=1:100
-    sleep(0.01)
-    @info "algorithm1" progress=i/100
+module LogTest
+    using MicroLogging
+    function f()
+        @debug "Message from LogTest"
+        @info  "Message from LogTest"
+        @warn  "Message from LogTest"
+        @error "Message from LogTest"
+    end
 end
+LogTest.f()
+configure_logging(LogTest, min_level=:error)
+@info "Set log filtering to error level for LogTest module"
+LogTest.f()
 
-
+#-------------------------------------------------------------------------------
 @info "# Task-based log dispatch using dynamic scoping"
 function some_operation()
     @info "Dispatches to the current task logger, or the global logger"
@@ -49,39 +57,17 @@ $(strip(String(take!(logstream))))
 ................................
 """
 
-
+#-------------------------------------------------------------------------------
 @info "# Formatting logs can't crash the application"
-@info "1÷0 = $(1÷0)"
-
-@error """
-       Multiline messages      | 11.1
-       are readably justified  | 22.2
-       """
+@info "Blah $(error("An intentional error"))"
 
 
-@info "# Logging may be completely disabled below a given level, per module"
-module LogTest
-    using MicroLogging
-    function f(x)
-        @debug "A LogTest module debug message $x"
-        @info  "A LogTest module info message $x"
-        @warn  "A LogTest module warning message $x"
-        @error "A LogTest module error message $x"
-    end
-    module SubModule
-        using MicroLogging
-        function f()
-            @debug "Message from sub module"
-            @info  "Message from sub module"
-            @warn  "Message from sub module"
-            @error "Message from sub module"
-        end
-    end
+#-------------------------------------------------------------------------------
+@info "# InteractiveLogger log formatting"
+try
+    error("An intentional error")
+catch err
+    @info "Support for exceptions",err
 end
-configure_logging(min_level=:warn)
-@warn "Early log filtering to warn level and above"
-LogTest.f(1)
-LogTest.SubModule.f()
-@warn "Early log filtering to info and above (the default)"
+
 configure_logging(min_level=:info)
-LogTest.f(2)
