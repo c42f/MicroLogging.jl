@@ -26,7 +26,7 @@ using MicroLogging
 @info "# Logging macros"
 @debug "A message for debugging (filtered out by default)"
 @info "Information about normal program operation"
-@warn "A potentially problem was detected"
+@warn "A potential problem was detected"
 @error "Something definitely went wrong"
 x = [1 2;3 4]
 @info "Support for key value pairs" x a=1 b="asdf"
