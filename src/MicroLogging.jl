@@ -425,7 +425,7 @@ end
 #-------------------------------------------------------------------------------
 # Logger control and lookup
 
-_global_logstate = LogState(BelowMinLevel, NullLogger()) # See __init__
+_global_logstate = LogState(NullLogger()) # See __init__
 
 """
     global_logger()
