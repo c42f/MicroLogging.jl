@@ -16,13 +16,26 @@ export
     InteractiveLogger
 
 # core.jl includes the code which will hopefully go into Base in 0.7
-include("core.jl")
-using .Logging
-import .Logging:
-    LogLevel, BelowMinLevel, Debug, Info, Warn, Error, AboveMaxLevel,
-    disable_logging, configure_logging,
-    handle_message, shouldlog, min_enabled_level,
-    parse_level
+const core_in_base = isdefined(Base, :Logging)
+
+if core_in_base
+    using Base.Logging
+
+    import Base.Logging:
+        LogLevel, BelowMinLevel, Debug, Info, Warn, Error, AboveMaxLevel,
+        disable_logging, configure_logging,
+        handle_message, shouldlog, min_enabled_level,
+        parse_level
+else
+    include("core.jl")
+    using .Logging
+
+    import .Logging:
+        LogLevel, BelowMinLevel, Debug, Info, Warn, Error, AboveMaxLevel,
+        disable_logging, configure_logging,
+        handle_message, shouldlog, min_enabled_level,
+        parse_level
+end
 
 
 include("loggers.jl")
