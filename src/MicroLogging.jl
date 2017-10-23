@@ -364,8 +364,8 @@ function dispatch_message(logger, level, _module, group, id, filepath, line, cre
         # Try really hard to get the message to the logger, with
         # progressively less information.
         try
-            msg = ("Failed to generate log record in module $_module at $filepath:$line",err)
-            handle_message(logger, Error, msg, _module, group, id, filepath, line)
+            msg = "Exception while generating log record in module $_module at $filepath:$line"
+            handle_message(logger, Error, msg, _module, group, id, filepath, line; exception=err)
         catch err2
             try
                 # Give up and write to STDERR, in three independent calls to
