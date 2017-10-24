@@ -73,28 +73,26 @@ with_logger(SimpleLogger(logstream)) do
     @info "Logging redirected"
     some_operation()
 end
-@info """
-Logs, captured separately in the with_logger() block:
-................................
-$(strip(String(take!(logstream))))
-................................
-"""
+@info "Logs, captured separately in the with_logger() block" logstring=strip(String(take!(logstream)))
 
 #-------------------------------------------------------------------------------
 @info "# Formatting logs can't crash the application"
 @info "Blah $(error("An intentional error"))"
 
-
-#-------------------------------------------------------------------------------
-@info "# InteractiveLogger log formatting"
-try
-    error("An intentional error")
-catch err
-    @info "Support for exceptions",err
-end
-
 configure_logging(min_level=:info)
+nothing
 ```
+
+The script above produces console output like the following.
+`InteractiveLogger` tries to put the metadata out of your way as much as
+possible by placing it on the right hand of the terminal.
+
+![Micrologging example screenshot](doc/micrologging_example.png)
+
+Notice that the message part of each log record is interpreted as markdown by
+convention to allow for readable log formatting with various backends.  If you
+want to transport data, you should send it through as a user defined key value
+pair rather than interpolating it into the log message itself.
 
 
 ## MicroLogging implementation choices

@@ -56,14 +56,5 @@ end
 @info "# Formatting logs can't crash the application"
 @info "Blah $(error("An intentional error"))"
 
-
-#-------------------------------------------------------------------------------
-@info "# InteractiveLogger log formatting"
-try
-    error("An intentional error")
-catch err
-    @info "Support for exceptions" exception=err
-end
-
 configure_logging(min_level=:info)
 nothing
