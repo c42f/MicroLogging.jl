@@ -8,9 +8,10 @@ MicroLogging is a prototype for a new logging interface for `Base` in julia-0.7.
 For design discussion see the Julep -
 https://github.com/JuliaLang/Juleps/pull/30/files
 
-Logging should be useful and pleasant for the average package developer, but
-should meet the efficiency and flexibility demands of production deployment.
-`MicroLogging` sets out to achieve both of these things in one interface.
+Logging should be useful and pleasant for the average user and package
+developer, but should meet the efficiency and flexibility demands of production
+deployment.  `MicroLogging` sets out to achieve both of these things in one
+interface.
 
 ## Install
 
@@ -18,7 +19,7 @@ should meet the efficiency and flexibility demands of production deployment.
 Pkg.add("MicroLogging")
 ```
 
-## Quickstart
+## Quickstart Example
 
 ```julia
 using MicroLogging
