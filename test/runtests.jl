@@ -1,5 +1,6 @@
 using MicroLogging
 using Base.Test
+using Compat
 import MicroLogging: LogLevel, BelowMinLevel, Debug, Info, Warn, Error, AboveMaxLevel
 
 if VERSION < v"0.6-"
