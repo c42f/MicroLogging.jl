@@ -86,17 +86,33 @@ function termlength(str)
 end
 
 function levelstyle(level::LogLevel)
-    if     level < Info  return (:cyan,   false, ' ')
-    elseif level < Warn  return (:blue,   false, ' ')
-    elseif level < Error return (:yellow, true, '~')
-    else                 return (:red,    true, '!')
+    if     level < Info  return (:blue,   false, ' ', '-')
+    elseif level < Warn  return (:cyan,   false, ' ', '-')
+    elseif level < Error return (:yellow, true,  '~', '~')
+    else                 return (:red,    true,  '*', '*')
     end
 end
 
 function handle_message(logger::InteractiveLogger, level, msg, _module, group,
                         id, file, line; kwargs...)
+    # TODO: filter max_log here...
     handle_message(logger, level, formatmsg(msg), _module, group, id,
                    file, line; kwargs...)
+end
+
+function handle_message(logger::InteractiveLogger, level, msg::AbstractString,
+                        _module, group, id, filepath, line;
+                        max_log=nothing, kwargs...)
+    if max_log !== nothing
+        count = get!(logger.message_counts, id, 0)
+        count += 1
+        logger.message_counts[id] = count
+        if count > max_log
+            push!(logger.blacklisted_ids, id)
+            return
+        end
+    end
+    display_message(logger, level, msg, _module, group, id, filepath, line; kwargs...)
 end
 
 function print_log_line(stream, lhs, message, rhs,
@@ -112,42 +128,43 @@ function print_log_line(stream, lhs, message, rhs,
     print(stream, " ")
     padwidth = max(0, width - (termlength(message) + 1 +
                                length(lhs) + length(rhs)))
-    # Workaround for ^(::Char, ::Int) bugs in 0.6
-    padstr = padwidth == 0 ? "" : padwidth == 1 ? padchar : padchar^padwidth
-    if emphasize
-        print_with_color(color, stream, padstr, bold=false)
-    else
-        print(stream, padstr)
-    end
-    if !isempty(rhs)
-        print_with_color(color, stream, rhs, bold=emphasize)
+    if !isempty(rhs) || padchar != ' '
+        # Workaround for ^(::Char, ::Int) bugs in 0.6
+        padstr = padwidth == 0 ? "" : padwidth == 1 ? padchar : padchar^padwidth
+        if emphasize
+            print_with_color(color, stream, padstr, bold=false)
+        else
+            print(stream, padstr)
+        end
+        if !isempty(rhs)
+            print_with_color(color, stream, rhs, bold=emphasize)
+        end
     end
     print(stream, "\n")
 end
 
-function handle_message(logger::InteractiveLogger, level, msg::AbstractString,
-                        _module, group, id, filepath, line;
-                        progress=nothing, once=nothing,
-                        max_log=nothing, kwargs...)
-    if max_log !== nothing
-        count = get!(logger.message_counts, id, 0)
-        count += 1
-        logger.message_counts[id] = count
-        if count > max_log
-            push!(logger.blacklisted_ids, id)
-            return
-        end
-    end
+function display_message(logger::InteractiveLogger, level, msg::AbstractString,
+                         _module, group, id, filepath, line;
+                         progress=nothing, once=nothing, kwargs...)
     # TODO: progress throttling?
     # Log printing
     filename = basename(String(filepath))
-    color, bold, padchar = levelstyle(convert(LogLevel, level))
+    color, emphasize, padchar, prefixchar = levelstyle(convert(LogLevel, level))
     # Attempt at avoiding the problem of distracting metadata in info log
     # messages - print metadata to the right hand side.
     metastr = " $level $filename:$line"
-    emphasize = level >= Warn
-    # lhsmeta = level >= Warn ? "$level: " : ""
     msg = rstrip(msg, '\n')
+
+    # Hack: render markdown to temporary buffer, and munge it to remove
+    # trailing newlines, even with confounding color codes.
+    buf = IOBuffer()
+    dsize = displaysize(logger.stream)
+    width = dsize[2]
+    Markdown.term(IOContext(buf, :displaysize=>(dsize[1],width-2)), Markdown.parse(msg))
+    msg = String(take!(buf))
+    msg = replace(msg, r"\n(\e\[[0-9]+m)$", s"\1")
+    msg = rstrip(msg)
+
     hascolor = '\e' in msg
     if progress === nothing
         if logger.prev_progress_key !== nothing
@@ -155,35 +172,30 @@ function handle_message(logger::InteractiveLogger, level, msg::AbstractString,
         end
         logger.prev_progress_key = nothing
 
-        width = displaysize(logger.stream)[2]
-
         msglines = split(msg, '\n')
-        if emphasize
-            if length(msglines) <= 1
-                print_log_line(logger.stream, "$level: ", msglines[1], metastr,
-                               width, hascolor, padchar, color, bold)
-                shift!(msglines)
-            else
-                print_log_line(logger.stream, "$level: ", "", metastr,
-                               width, hascolor, padchar, color, bold)
-            end
-            metastr = " ."
-        end
+        print_log_line(logger.stream, prefixchar, msglines[1], metastr,
+                       width, hascolor, padchar, color, emphasize)
+        shift!(msglines)
+        metastr = ""
         for line in msglines
-            print_log_line(logger.stream, "", line, metastr,
-                           width, hascolor, ' ', color, bold)
-            metastr = " ."
+            print_log_line(logger.stream, "|", line, metastr,
+                           width, hascolor, ' ', color, emphasize)
         end
 
         for (k,v) in kwargs
             kvmsg = formatmsg(v)
             hascolor = '\e' in kvmsg
             kvlines = split(kvmsg, '\n')
-            print_log_line(logger.stream, " ", string(k, " = ", kvlines[1]),
-                           metastr, width, hascolor, ' ', color, false)
-            for i in 2:length(kvlines)
-                print_log_line(logger.stream, "  ", kvlines[i],
-                               metastr, width, hascolor, ' ', color, false)
+            if length(kvlines) == 1
+                print_log_line(logger.stream, "|   ", string(k, " = ", kvlines[1]),
+                               metastr, width, hascolor, ' ', color, emphasize)
+            else
+                print_log_line(logger.stream, "|   ", string(k, " ="),
+                               metastr, width, hascolor, ' ', color, emphasize)
+                for i in 1:length(kvlines)
+                    print_log_line(logger.stream, "|    ", kvlines[i],
+                                   metastr, width, hascolor, ' ', color, emphasize)
+                end
             end
         end
     else
@@ -191,11 +203,13 @@ function handle_message(logger::InteractiveLogger, level, msg::AbstractString,
         if logger.prev_progress_key !== nothing && logger.prev_progress_key != progress_key
             print(logger.stream, "\n")
         end
-        nbar = max(1, displaysize(logger.stream)[2] - (termlength(msg) + length(metastr)) - 4)
+        nbar = max(1, width - (termlength(msg) + length(prefixchar) + length(metastr)) - 3)
         nfilledbar = round(Int, clamp(progress, 0, 1)*nbar)
-        msgbar = string("\r", msg, " [", "-"^nfilledbar, " "^(nbar - nfilledbar), "]")
+        print(logger.stream, "\r")
+        print_with_color(color, logger.stream, prefixchar, bold=emphasize)
+        msgbar = string(msg, " [", "-"^nfilledbar, " "^(nbar - nfilledbar), "]")
         print(logger.stream, msgbar)
-        print_with_color(color, logger.stream, metastr, bold=bold)
+        print_with_color(color, logger.stream, metastr, bold=emphasize)
         logger.prev_progress_key = progress_key
     end
 end

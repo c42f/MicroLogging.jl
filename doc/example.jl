@@ -50,12 +50,7 @@ with_logger(SimpleLogger(logstream)) do
     @info "Logging redirected"
     some_operation()
 end
-@info """
-Logs, captured separately in the with_logger() block:
-................................
-$(strip(String(take!(logstream))))
-................................
-"""
+@info "Logs, captured separately in the with_logger() block" logstring=strip(String(take!(logstream)))
 
 #-------------------------------------------------------------------------------
 @info "# Formatting logs can't crash the application"
@@ -67,7 +62,8 @@ $(strip(String(take!(logstream))))
 try
     error("An intentional error")
 catch err
-    @info "Support for exceptions",err
+    @info "Support for exceptions" exception=err
 end
 
 configure_logging(min_level=:info)
+nothing
