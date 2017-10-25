@@ -160,7 +160,7 @@ end
     if Compat.macros_have_sourceloc # See #1
         @test record.line == kwargs[:real_line]
     end
-    @test record.id == :Main_b70e82
+    @test record.id == :Main_02d1fa22
 
     # User-defined metadata
     @test kwargs[:bar_val] === bar_val
