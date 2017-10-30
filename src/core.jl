@@ -154,9 +154,8 @@ function logmsg_code(_module, file, line, level, message, exs...)
             elseif k == :_group
                 group = esc(v)
             else
-                v = esc(v)
                 # Copy across key value pairs for structured log records
-                push!(kwargs, Expr(:kw, k, v))
+                push!(kwargs, Expr(:kw, k, esc(v)))
             end
         #=
         # FIXME - decide whether this special syntax is a good idea.
@@ -185,6 +184,9 @@ function logmsg_code(_module, file, line, level, message, exs...)
                 end
             end
         =#
+        elseif isexpr(ex, :...)
+            # Keyword splatting
+            push!(kwargs, esc(ex))
         else
             # Positional arguments - will be converted to key value pairs
             # automatically.

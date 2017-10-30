@@ -147,8 +147,10 @@ end
             value_in_msg_block = 1000.0
             "test2"
         end value_in_msg_block
+        test_splatting(;kws...) = @info "test3" kws...
+        test_splatting(a=1,b=2.0)
     end
-    @test length(logs) == 2
+    @test length(logs) == 3
 
     record = logs[1]
 
@@ -173,6 +175,14 @@ end
     @test record2 ⊃ (Info,"test2")
     kwargs = Dict(record2.kwargs)
     @test kwargs[:value_in_msg_block] === 1000.0
+
+    # Splatting of keywords
+    record3 = logs[3]
+    @test record3 ⊃ (Info,"test3")
+    kwargs = Dict(record3.kwargs)
+    @test sort(collect(keys(kwargs))) == [:a, :b]
+    @test kwargs[:a] === 1
+    @test kwargs[:b] === 2.0
 end
 
 @testset "Formatting exceptions are caught inside the logger" begin
