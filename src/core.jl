@@ -41,6 +41,7 @@ LogLevel(level::LogLevel) = level
 Base.isless(a::LogLevel, b::LogLevel) = isless(a.level, b.level)
 Base.:+(level::LogLevel, inc) = LogLevel(level.level+inc)
 Base.:-(level::LogLevel, inc) = LogLevel(level.level-inc)
+Base.convert(::Type{LogLevel}, level::Integer) = LogLevel(level)
 
 const BelowMinLevel = LogLevel(typemin(Int32))
 const Debug         = LogLevel(-1000)
