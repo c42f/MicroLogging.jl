@@ -1,5 +1,3 @@
-module Logging
-
 using Compat
 using FastClosures
 
@@ -500,7 +498,3 @@ function disable_logging(level::LogLevel)
 end
 disable_logging(level) = disable_logging(parse_level(level))
 
-
-__init__() = global_logger(SimpleLogger(STDERR))
-
-end
