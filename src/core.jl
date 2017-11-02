@@ -1,19 +1,6 @@
 using Compat
 using FastClosures
 
-export
-    # Frontend
-    @debug, @info, @warn, @error, @logmsg,
-    # Log control
-    with_logger, current_logger, global_logger,
-    disable_logging, configure_logging,
-    # Logger type
-    AbstractLogger,
-    # Logger methods
-    handle_message, shouldlog, min_enabled_level,
-    # Loggers
-    NullLogger, SimpleLogger
-
 """
 A logger controls how log records are filtered and dispatched.  When a log
 record is generated, the logger is the first piece of user configurable code
