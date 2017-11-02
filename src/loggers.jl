@@ -88,10 +88,10 @@ function termlength(str)
 end
 
 function levelstyle(level::LogLevel)
-    if     level < Info  return (:blue,   false, ' ', '-')
-    elseif level < Warn  return (:cyan,   false, ' ', '-')
-    elseif level < Error return (:yellow, true,  '~', '~')
-    else                 return (:red,    true,  '*', '*')
+    if     level < Info  return (:blue,   false, ' ', 'D')
+    elseif level < Warn  return (:cyan,   false, ' ', 'I')
+    elseif level < Error return (:yellow, true,  '~', 'W')
+    else                 return (:red,    true,  '*', 'E')
     end
 end
 
