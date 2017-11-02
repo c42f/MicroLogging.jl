@@ -32,12 +32,14 @@ LogRecord(level, msg, _module=nothing, group=nothing, id=nothing, file=nothing, 
 mutable struct TestLogger <: AbstractLogger
     records::Vector{LogRecord}
     min_level::LogLevel
+    catch_exceptions::Bool
     shouldlog_args
 end
 
-TestLogger(min_level=BelowMinLevel) = TestLogger(LogRecord[], min_level, nothing)
+TestLogger(min_level=BelowMinLevel; catch_exceptions=true) = TestLogger(LogRecord[], min_level, catch_exceptions, nothing)
 
 MicroLogging.min_enabled_level(logger::TestLogger) = logger.min_level
+MicroLogging.catch_exceptions(logger::TestLogger) = logger.catch_exceptions
 
 function MicroLogging.configure_logging(logger::TestLogger; min_level=Info)
     logger.min_level = min_level
@@ -185,7 +187,8 @@ end
     @test kwargs[:b] === 2.0
 end
 
-@testset "Formatting exceptions are caught inside the logger" begin
+@testset "Log message exception handling" begin
+    # Errors are caught by default
     logs = collect_logs() do
         @info "foo $(1÷0)"
         @info "bar"
@@ -193,6 +196,9 @@ end
     @test logs[1] ⊃ (Error,)
     @test logs[2] ⊃ (Info,"bar")
     @test length(logs) == 2
+    @test_throws DivideError with_logger(TestLogger(catch_exceptions=false)) do
+        @info "foo $(1÷0)"
+    end
 end
 
 @testset "Special keywords" begin
