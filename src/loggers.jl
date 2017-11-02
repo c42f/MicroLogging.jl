@@ -7,14 +7,15 @@ way.
 mutable struct InteractiveLogger <: AbstractLogger
     stream::IO
     default_min_level::LogLevel
+    catch_exceptions::Bool
     prev_progress_key
     message_counts::Dict{Any,Int}
     module_limits::Dict{Module,LogLevel}
     blacklisted_ids::Set{Any}
 end
 
-function InteractiveLogger(stream::IO; min_level=Info)
-    InteractiveLogger(stream, min_level, nothing,
+function InteractiveLogger(stream::IO; min_level=Info, catch_exceptions=true)
+    InteractiveLogger(stream, min_level, catch_exceptions, nothing,
              Dict{Any,Int}(), Dict{Module,LogLevel}(), Set{Any}())
 end
 
@@ -51,6 +52,7 @@ function min_enabled_level(logger::InteractiveLogger)
     return min_level
 end
 
+catch_exceptions(logger::InteractiveLogger) = logger.catch_exceptions
 
 formatmsg(msg) = string(msg)
 
