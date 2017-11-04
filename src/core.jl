@@ -446,18 +446,14 @@ current_logger() = current_logstate().logger
 """
     SimpleLogger(stream=STDERR, min_level=Info)
 
-Simplistic logger for logging all messages with level not less than `min_level`
-to `stream`.
+Simplistic logger for logging all messages with level greater than or equal to
+`min_level` to `stream`.
 """
 struct SimpleLogger <: AbstractLogger
     stream::IO
     min_level::LogLevel
 end
-SimpleLogger(stream::IO=STDERR, level=Info) = SimpleLogger(stream, parse_level(level))
-
-function configure_logging(logger::SimpleLogger; min_level=Info)
-    SimpleLogger(logger.stream, parse_level(min_level))
-end
+SimpleLogger(stream::IO=STDERR, level=Info) = SimpleLogger(stream, level)
 
 shouldlog(logger::SimpleLogger, level, args...) = !(level < logger.min_level)
 
@@ -465,44 +461,11 @@ min_enabled_level(logger::SimpleLogger) = logger.min_level
 
 function handle_message(logger::SimpleLogger, level, msg, _module, group, id,
                         filepath, line; kwargs...)
-    println(logger.stream, "$level [$(basename(String(filepath))):$line]: $msg")
-end
-
-
-#-------------------------------------------------------------------------------
-# Logger configuration
-
-parse_level(level) = level
-parse_level(level::String) = parse_level(Symbol(lowercase(level)))
-function parse_level(level::Symbol)
-    if      level == :belowminlevel  return  BelowMinLevel
-    elseif  level == :debug          return  Debug
-    elseif  level == :info           return  Info
-    elseif  level == :warn           return  Warn
-    elseif  level == :error          return  Error
-    elseif  level == :abovemaxlevel  return  AboveMaxLevel
-    else
-        throw(ArgumentError("Unknown log level $level"))
+    println(logger.stream, level, " [", _module, ":", group,
+            " @ ", filepath, ":", line, "]:")
+    println("| ", replace(msg, '\n', "\n| "))
+    for (key,val) in kwargs
+        println(logger.stream, "|   ", key, " = ", val)
     end
 end
-
-"""
-    configure_logging(args...; kwargs...)
-
-Call `configure_logging` with the current logger, and update cached log
-filtering information.
-"""
-function configure_logging(args...; kwargs...)
-    logger = configure_logging(current_logger(), args...; kwargs...)::AbstractLogger
-    if haskey(task_local_storage(), :LOGGER_STATE)
-        task_local_storage()[:LOGGER_STATE] = LogState(logger)
-    else
-        global _global_logstate = LogState(logger)
-    end
-    logger
-end
-
-configure_logging(::AbstractLogger, args...; kwargs...) =
-    throw(ArgumentError("No configure_logging method matches the provided arguments."))
-
 

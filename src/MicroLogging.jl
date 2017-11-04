@@ -32,16 +32,19 @@ const core_in_base = isdefined(Base, :AbstractLogger)
 
 if core_in_base
     import Base:
-        LogLevel, BelowMinLevel, Debug, Info, Warn, Error, AboveMaxLevel,
-        disable_logging, configure_logging,
+        AbstractLogger, LogLevel,
+        BelowMinLevel, Debug, Info, Warn, Error, AboveMaxLevel,
+        disable_logging,
         handle_message, shouldlog, min_enabled_level, catch_exceptions,
-        parse_level
+        SimpleLogger
 else
     include("core.jl")
 end
 
 
 include("loggers.jl")
+
+include("config.jl")
 
 function __init__()
     global_logger(InteractiveLogger(STDERR))
