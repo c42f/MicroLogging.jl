@@ -4,23 +4,17 @@ module MicroLogging
 
 # ----- Core API to go in Base -----
 export
+    ## Logger types
+    AbstractLogger, LogLevel, NullLogger,
+    # Public logger API:
+    #   handle_message, shouldlog, min_enabled_level, catch_exceptions
+    # (not exported, as they're not generally called by users)
+    #
     ## Log creation
     @debug, @info, @warn, @error, @logmsg,
-    ## Types
-    LogLevel, AbstractLogger,
-    ## Concrete Loggers
-    NullLogger,
     ## Logger installation and control
     # TODO: Should some of these go into stdlib ?
-    with_logger, current_logger, global_logger,
-    disable_logging
-    #
-    # The following AbstractLogger functions are part of the public core API
-    # but not exported:
-    #   handle_message, shouldlog, min_enabled_level, catch_exceptions
-    #
-    # You don't need these in your namespace, as you only care about them when
-    # defining your own logger type.
+    with_logger, current_logger, global_logger, disable_logging
 
 # ----- API to go in StdLib package ? -----
 export
