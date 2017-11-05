@@ -372,4 +372,44 @@ end
 
 #-------------------------------------------------------------------------------
 
+@testset "SimpleLogger" begin
+    @test MicroLogging.shouldlog(SimpleLogger(STDERR), Debug) === false
+    @test MicroLogging.shouldlog(SimpleLogger(STDERR), Info) === true
+    @test MicroLogging.shouldlog(SimpleLogger(STDERR, Debug), Debug) === true
+
+    function genmsg(level, message, _module, filepath, line; kws...)
+        io = IOBuffer()
+        logger = SimpleLogger(io, Debug)
+        MicroLogging.handle_message(logger, level, message, _module, :group, :id,
+                                    filepath, line; kws...)
+        s = String(take!(io))
+        # Remove the small amount of color, as `Base.print_with_color` can't be
+        # simply controlled.
+        s = replace(s, r"^\e\[1m\e\[..m(.- )\e\[39m\e\[22m", s"\1")
+        # println(s)
+        s
+    end
+
+    # Simple
+    @test genmsg(Info, "msg", LogLevelTest, "some/path.jl", 101) ==
+    """
+    I- msg -Info:LogLevelTest:path.jl:101
+    """
+
+    # Multiline message
+    @test genmsg(Warn, "line1\nline2", LogLevelTest, "some/path.jl", 101) ==
+    """
+    W- line1
+    |  line2 -Warn:LogLevelTest:path.jl:101
+    """
+
+    # Keywords
+    @test genmsg(Error, "msg", Main, "other.jl", 101, a=1, b="asdf") ==
+    """
+    E- msg -Error:Main:other.jl:101
+    |  a = 1
+    |  b = asdf
+    """
+end
+
 end

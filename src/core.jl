@@ -459,13 +459,17 @@ shouldlog(logger::SimpleLogger, level, args...) = !(level < logger.min_level)
 
 min_enabled_level(logger::SimpleLogger) = logger.min_level
 
-function handle_message(logger::SimpleLogger, level, msg, _module, group, id,
+function handle_message(logger::SimpleLogger, level, message, _module, group, id,
                         filepath, line; kwargs...)
-    println(logger.stream, level, " [", _module, ":", group,
-            " @ ", filepath, ":", line, "]:")
-    println("| ", replace(msg, '\n', "\n| "))
+    levelstr = string(level)
+    color = level < Info  ? :blue :
+            level < Warn  ? :cyan :
+            level < Error ? :yellow : :red
+    print_with_color(color, logger.stream, first(levelstr), "- ", bold=true)
+    print(logger.stream, replace(message, '\n', "\n|  "))
+    println(logger.stream, " -", levelstr, ":", _module, ":", basename(filepath), ":", line)
     for (key,val) in kwargs
-        println(logger.stream, "|   ", key, " = ", val)
+        println(logger.stream, "|  ", key, " = ", val)
     end
 end
 
