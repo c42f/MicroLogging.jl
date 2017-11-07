@@ -36,7 +36,7 @@ if core_in_base
         BelowMinLevel, Debug, Info, Warn, Error, AboveMaxLevel,
         disable_logging,
         handle_message, shouldlog, min_enabled_level, catch_exceptions,
-        SimpleLogger
+        SimpleLogger, LogState
 else
     include("core.jl")
 end

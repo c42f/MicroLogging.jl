@@ -392,7 +392,6 @@ disabled.
 function disable_logging(level::LogLevel)
     _min_enabled_level[] = level + 1
 end
-disable_logging(level) = disable_logging(parse_level(level))
 
 
 """

@@ -25,10 +25,11 @@ filtering information.
 """
 function configure_logging(args...; kwargs...)
     logger = configure_logging(current_logger(), args...; kwargs...)::AbstractLogger
+    # FIXME: Tools for setting this should be in Base.
     if haskey(task_local_storage(), :LOGGER_STATE)
         task_local_storage()[:LOGGER_STATE] = LogState(logger)
     else
-        global _global_logstate = LogState(logger)
+        global_logger(logger)
     end
     logger
 end
@@ -40,3 +41,4 @@ function configure_logging(logger::SimpleLogger, args...; min_level=Info, kwargs
     SimpleLogger(logger.stream, parse_level(min_level))
 end
 
+disable_logging(level) = disable_logging(parse_level(level))
