@@ -6,7 +6,7 @@ struct TrivialLogger <: AbstractLogger; end
 
 MicroLogging.min_enabled_level(::TrivialLogger) = MicroLogging.Warn
 MicroLogging.shouldlog(::TrivialLogger, level, a...) = level >= MicroLogging.Error
-MicroLogging.logmsg(::TrivialLogger, a...; kws...) = println(a...)
+MicroLogging.handle_message(::TrivialLogger, a...; kws...) = println(a...)
 
 end
 
