@@ -251,8 +251,8 @@ end
 function logmsg_code(_module, file, line, level, message, exs...)
     # Generate a unique message id by default
     messagetemplate = string(message)
-    id = Expr(:quote, log_record_id(_module, level, messagetemplate))
-    group = Expr(:quote, Symbol(splitext(basename(file))[1]))
+    id = nothing
+    group = nothing
     kwargs = Any[]
     for ex in exs
         if ex isa Expr && ex.head === :(=) && ex.args[1] isa Symbol
@@ -291,6 +291,9 @@ function logmsg_code(_module, file, line, level, message, exs...)
             push!(kwargs, Expr(:kw, Symbol(ex), esc(ex)))
         end
     end
+    # Note that it may be necessary to set `id` and `group` manually during bootstrap
+    id !== nothing || (id = Expr(:quote, log_record_id(_module, level, messagetemplate)))
+    group !== nothing || (group = Expr(:quote, Symbol(splitext(basename(file))[1])))
     quote
         level = $level
         std_level = convert(LogLevel, level)
