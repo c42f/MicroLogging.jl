@@ -391,22 +391,22 @@ end
     end
 
     # Simple
-    @test genmsg(Info, "msg", LogLevelTest, "some/path.jl", 101) ==
+    @test genmsg(Info, "msg", Main, "some/path.jl", 101) ==
     """
-    I- msg -Info:LogLevelTest:path.jl:101
+    I- msg -Info:Main:path.jl:101
     """
 
     # Multiline message
-    @test genmsg(Warn, "line1\nline2", LogLevelTest, "some/path.jl", 101) ==
+    @test genmsg(Warn, "line1\nline2", Main, "some/path.jl", 101) ==
     """
     W- line1
-    |  line2 -Warn:LogLevelTest:path.jl:101
+    |  line2 -Warn:Main:path.jl:101
     """
 
     # Keywords
-    @test genmsg(Error, "msg", Main, "other.jl", 101, a=1, b="asdf") ==
+    @test genmsg(Error, "msg", Base, "other.jl", 101, a=1, b="asdf") ==
     """
-    E- msg -Error:Main:other.jl:101
+    E- msg -Error:Base:other.jl:101
     |  a = 1
     |  b = asdf
     """
