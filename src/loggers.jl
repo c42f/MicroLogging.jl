@@ -88,10 +88,10 @@ function termlength(str)
 end
 
 function levelstyle(level::LogLevel)
-    if     level < Info  return (:blue,   false, ' ', 'D')
-    elseif level < Warn  return (:cyan,   false, ' ', 'I')
-    elseif level < Error return (:yellow, true,  '~', 'W')
-    else                 return (:red,    true,  '*', 'E')
+    if     level < Info  return ((:blue,   true), "D-")
+    elseif level < Warn  return ((:cyan,   true), "I-")
+    elseif level < Error return ((:yellow, true), "W-")
+    else                 return ((:red,    true), "E-")
     end
 end
 
@@ -117,32 +117,60 @@ function handle_message(logger::InteractiveLogger, level, msg::AbstractString,
     display_message(logger, level, msg, _module, group, id, filepath, line; kwargs...)
 end
 
-function print_log_line(stream, lhs, message, rhs,
-                        width, hascolor, padchar, color, emphasize)
-    if !isempty(lhs)
-        print_with_color(color, stream, lhs, bold=emphasize)
-    end
-    if emphasize && !hascolor
-        print_with_color(color, stream, message, bold=false)
-    else
-        print(stream, message)
-    end
-    print(stream, " ")
-    padwidth = max(0, width - (termlength(message) + 1 +
-                               length(lhs) + length(rhs)))
-    if !isempty(rhs) || padchar != ' '
-        # Workaround for ^(::Char, ::Int) bugs in 0.6
-        padstr = padwidth == 0 ? "" : padwidth == 1 ? padchar : padchar^padwidth
-        if emphasize
-            print_with_color(color, stream, padstr, bold=false)
-        else
-            print(stream, padstr)
+# Print a string with prefixes on each line, and a suffix on the last line
+function print_with_decorations(io, prefixes, decoration_color, str, suffix)
+    @assert !isempty(prefixes)
+    p = 1
+    splitter = r"(\n|\e\[[0-9;]*m)"
+    i = start(str)
+    n = endof(str)
+    colorcode = ""
+    stylecode = ""
+    print_with_color(decoration_color[1], io, prefixes[p], bold=decoration_color[2])
+    linelen = length(prefixes[p])
+    p == length(prefixes) || (p += 1)
+    print(io, colorcode, stylecode)
+    while i <= n
+        r = search(str,splitter,i)
+        j = isempty(r) ? n : last(r)
+        linelen += length(SubString(str, i, (isempty(r) ? n : prevind(str,first(r)))))
+        print(io, SubString(str, i, j))
+        i = nextind(str,j)
+        if !isempty(r)
+            if str[r[1]] == '\n'
+                !Base.have_color || print(io, "\e[0m")
+                print_with_color(decoration_color[1], io, prefixes[p], bold=decoration_color[2])
+                linelen = length(prefixes[p])
+                p == length(prefixes) || (p += 1)
+                !Base.have_color || print(io, "\e[0m")
+                print(io, colorcode, stylecode)
+            else
+                code = str[r]
+                if code == "\e[m"
+                elseif code == "\e[22m"
+                    stylecode = ""
+                elseif code == "\e[39m"
+                    colorcode = ""
+                else
+                    icode = parse(Int, code[3:end-1])
+                    if 1 <= icode <= 29
+                        stylecode = code
+                    elseif 30 <= icode <= 38
+                        colorcode = code
+                    end
+                end
+            end
         end
-        if !isempty(rhs)
-            print_with_color(color, stream, rhs, bold=emphasize)
-        end
     end
-    print(stream, "\n")
+    if !isempty(suffix)
+        width = displaysize(io)[2]
+        if length(suffix) > width - linelen
+            print(io, "\n", prefixes[p])
+            linelen = length(prefixes[p])
+        end
+        print(io, " "^max(0, (width - linelen - length(suffix))))
+        print_with_color(decoration_color[1], io, suffix, bold=decoration_color[2])
+    end
 end
 
 function display_message(logger::InteractiveLogger, level, msg::AbstractString,
@@ -151,7 +179,7 @@ function display_message(logger::InteractiveLogger, level, msg::AbstractString,
     # TODO: progress throttling?
     # Log printing
     filename = basename(String(filepath))
-    color, emphasize, padchar, prefixchar = levelstyle(convert(LogLevel, level))
+    color, prefix = levelstyle(convert(LogLevel, level))
     # Attempt at avoiding the problem of distracting metadata in info log
     # messages - print metadata to the right hand side.
     metastr = " $level $filename:$line"
@@ -167,51 +195,32 @@ function display_message(logger::InteractiveLogger, level, msg::AbstractString,
     msg = replace(msg, r"\n(\e\[[0-9]+m)$", s"\1")
     msg = rstrip(msg)
 
-    hascolor = '\e' in msg
     if progress === nothing
         if logger.prev_progress_key !== nothing
             print(logger.stream, "\n")
         end
         logger.prev_progress_key = nothing
 
-        msglines = split(msg, '\n')
-        print_log_line(logger.stream, prefixchar, msglines[1], metastr,
-                       width, hascolor, padchar, color, emphasize)
-        shift!(msglines)
-        metastr = ""
-        for line in msglines
-            print_log_line(logger.stream, "|", line, metastr,
-                           width, hascolor, ' ', color, emphasize)
-        end
+        print_with_decorations(logger.stream, [prefix, "| "], color, msg, metastr)
+        print(logger.stream, "\n")
 
         for (k,v) in kwargs
-            kvmsg = formatmsg(v)
-            hascolor = '\e' in kvmsg
-            kvlines = split(kvmsg, '\n')
-            if length(kvlines) == 1
-                print_log_line(logger.stream, "|   ", string(k, " = ", kvlines[1]),
-                               metastr, width, hascolor, ' ', color, emphasize)
-            else
-                print_log_line(logger.stream, "|   ", string(k, " ="),
-                               metastr, width, hascolor, ' ', color, emphasize)
-                for i in 1:length(kvlines)
-                    print_log_line(logger.stream, "|    ", kvlines[i],
-                                   metastr, width, hascolor, ' ', color, emphasize)
-                end
-            end
+            valstr = formatmsg(v)
+            kvstr = '\n' in valstr ? string(k, " =\n", formatmsg(v)) :
+                                     string(k, " = ", formatmsg(v))
+            print_with_decorations(logger.stream, ["|   ", "|    "], color, kvstr, "")
+            print(logger.stream, "\n")
         end
     else
         progress_key = msg
         if logger.prev_progress_key !== nothing && logger.prev_progress_key != progress_key
             print(logger.stream, "\n")
         end
-        nbar = max(1, width - (termlength(msg) + length(prefixchar) + length(metastr)) - 3)
+        nbar = max(1, width - (termlength(msg) + length(prefix) + length(metastr)) - 3)
         nfilledbar = round(Int, clamp(progress, 0, 1)*nbar)
-        print(logger.stream, "\r")
-        print_with_color(color, logger.stream, prefixchar, bold=emphasize)
         msgbar = string(msg, " [", "-"^nfilledbar, " "^(nbar - nfilledbar), "]")
-        print(logger.stream, msgbar)
-        print_with_color(color, logger.stream, metastr, bold=emphasize)
+        print(logger.stream, "\r")
+        print_with_decorations(logger.stream, [prefix], color, msgbar, metastr)
         logger.prev_progress_key = progress_key
     end
 end
