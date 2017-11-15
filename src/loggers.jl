@@ -165,7 +165,7 @@ function print_with_decorations(io, prefixes, decoration_color, str, suffix)
     if !isempty(suffix)
         width = displaysize(io)[2]
         if length(suffix) > width - linelen
-            print(io, "\n", prefixes[p])
+            print_with_color(decoration_color[1], io, "\n", prefixes[p], bold=decoration_color[2])
             linelen = length(prefixes[p])
         end
         print(io, " "^max(0, (width - linelen - length(suffix))))
