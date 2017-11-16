@@ -56,15 +56,17 @@ catch_exceptions(logger::InteractiveLogger) = logger.catch_exceptions
 
 formatmsg(msg) = string(msg)
 
-function formatmsg(ex_msg::Exception)
-    io = IOBuffer()
+# Formatting of exceptions
+formatmsg(e::Tuple{Exception,Any}) = formatmsg(e[1], e[2])
+function formatmsg(ex::Exception)
     bt = catch_backtrace()
-    showerror(io, ex_msg, bt; backtrace=!isempty(bt))
+    formatmsg(ex, isempty(bt) ? nothing : bt)
+end
+function formatmsg(ex_msg::Exception, bt)
+    io = IOBuffer()
+    showerror(io, ex_msg, bt; backtrace = bt!=nothing)
     String(take!(io))
 end
-
-formatmsg(msg::Tuple) = join(map(formatmsg, msg), "\n")
-
 
 # Length of a string as it will appear in the terminal (after ANSI color codes
 # are removed)
