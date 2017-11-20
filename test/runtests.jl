@@ -72,12 +72,12 @@ function record_matches(r, ref::Tuple)
 end
 
 function record_matches(r, ref::LogRecord)
-    (r.level, r.message) == (ref.level, ref.message)        || return false
-    (ref._module  == nothing || r._module  == ref._module)  || return false
-    (ref.group    == nothing || r.group    == ref.group)    || return false
-    (ref.id       == nothing || r.id       == ref.id)       || return false
-    (ref.file     == nothing || r.file     == ref.file) || return false
-    (ref.line     == nothing || r.line     == ref.line)     || return false
+    (r.level, r.message) == (ref.level, ref.message)       || return false
+    (ref._module  == nothing || r._module  == ref._module) || return false
+    (ref.group    == nothing || r.group    == ref.group)   || return false
+    (ref.id       == nothing || r.id       == ref.id)      || return false
+    (ref.file     == nothing || r.file     == ref.file)    || return false
+    (ref.line     == nothing || r.line     == ref.line)    || return false
     rkw = Dict(r.kwargs)
     for (k,v) in ref.kwargs
         (haskey(rkw, k) && rkw[k] == v) || return false
@@ -88,24 +88,43 @@ end
 # Use superset operator for improved log message reporting in @test
 ⊃(r::LogRecord, ref) = record_matches(r, ref)
 
+macro test_logs(exs...)
+    length(exs) >= 1 || throw(ArgumentError("""`@test_logs` needs at least one arguments.
+                               Usage: `@test_logs [msgs...] expr_to_run`"""))
+    quote
+        @test ismatch_logs($(exs[1:end-1]...)) do
+            $(esc(exs[end]))
+        end
+    end
+end
+
+function ismatch_logs(f, patterns...)
+    logs = collect_logs(f)
+    length(logs) == length(patterns) || return false
+    for (pattern,log) in zip(patterns, logs)
+        ismatch(pattern, log) || return false
+    end
+    return true
+end
+
+function Base.ismatch(ref::Tuple, r::LogRecord)
+    if length(ref) == 1
+        return (r.level,) == ref
+    else
+        return (r.level, r.message) == ref
+    end
+end
+
 #-------------------------------------------------------------------------------
 #-------------------------------------------------------------------------------
 @testset "MicroLogging" begin
 
 @testset "Basic logging" begin
-    logs = collect_logs() do
-        @debug "a"
-        @info  "b"
-        @warn  "c"
-        @error "d"
-    end
-    @test logs[1] ⊃ (Debug, "a")
-    @test logs[2] ⊃ (Info , "b")
-    @test logs[3] ⊃ (Warn , "c")
-    @test logs[4] ⊃ (Error, "d")
-    @test length(logs) == 4
+    @test_logs (Debug, "a") @debug "a"
+    @test_logs (Info,  "a") @info  "a"
+    @test_logs (Warn,  "a") @warn  "a"
+    @test_logs (Error, "a") @error "a"
 end
-
 
 #-------------------------------------------------------------------------------
 # Front end
