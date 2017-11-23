@@ -17,11 +17,13 @@ end
 
 # Test helpers
 
+#--------------------------------------------------
 # A logger which does nothing, except enable exceptions to propagate
 struct AllowExceptionsLogger <: AbstractLogger ; end
 handle_message(logger::AllowExceptionsLogger) = nothing
 catch_exceptions(logger::AllowExceptionsLogger) = false
 
+#--------------------------------------------------
 # Log records
 struct LogRecord
     level
@@ -35,6 +37,7 @@ struct LogRecord
 end
 LogRecord(args...; kwargs...) = LogRecord(args..., kwargs)
 
+#--------------------------------------------------
 # Logger with extra test-related state
 mutable struct TestLogger <: AbstractLogger
     logs::Vector{LogRecord}
@@ -67,11 +70,23 @@ function collect_test_logs(f; min_level=Debug)
 end
 
 
+#--------------------------------------------------
+# Log testing tools
 macro test_logs(exs...)
     length(exs) >= 1 || throw(ArgumentError("""`@test_logs` needs at least one arguments.
                                Usage: `@test_logs [msgs...] expr_to_run`"""))
+    args = Any[]
+    kwargs = Any[]
+    for e in exs[1:end-1]
+        if e isa Expr && e.head == :(=)
+            push!(kwargs, Expr(:kw, e.args...))
+        else
+            push!(args, esc(e))
+        end
+    end
+    # TODO: Better error reporting in @test
     ex = quote
-        @test ismatch_logs($(exs[1:end-1]...)) do
+        @test ismatch_logs($(args...); $(kwargs...)) do
             $(esc(exs[end]))
         end
     end
@@ -82,8 +97,8 @@ macro test_logs(exs...)
     ex
 end
 
-function ismatch_logs(f, patterns...)
-    logs = collect_test_logs(f, min_level=BelowMinLevel)
+function ismatch_logs(f, patterns...; min_level=BelowMinLevel, kwargs...)
+    logs = collect_test_logs(f; min_level=min_level, kwargs...)
     length(logs) == length(patterns) || return false
     for (pattern,log) in zip(patterns, logs)
         ismatch(pattern, log) || return false
@@ -208,47 +223,25 @@ end
 
 @testset "Early log filtering" begin
     @testset "Log filtering, per task logger" begin
-        logs = let
-            logger = TestLogger()
-            with_logger(logger) do
-                @debug "a"
-                configure_logging(min_level=Info)
-                @debug "a"
-                @info  "b"
-                configure_logging(min_level=Error)
-                @warn  "c"
-                @error "d"
-            end
-            logger.logs
+        @test_logs (Warn, "c") min_level=Warn begin
+            @info "b"
+            @warn "c"
         end
-        @test length(logs) == 3
-        @test ismatch((Debug, "a"), logs[1])
-        @test ismatch((Info , "b"), logs[2])
-        @test ismatch((Error, "d"), logs[3])
     end
 
     @testset "Log filtering, global logger" begin
-        # Same test as above, but with global logger
         old_logger = global_logger()
         logs = let
-            logger = TestLogger(Debug)
+            logger = TestLogger(Warn)
             global_logger(logger)
-            @debug "a"
-            configure_logging(min_level=Info)
-            @debug "a"
-            @info  "b"
-            configure_logging(min_level=Error)
-            @test_throws ArgumentError configure_logging("unknown_argument")
-            @warn  "c"
-            @error "d"
+            @info "b"
+            @warn "c"
             logger.logs
         end
         global_logger(old_logger)
 
-        @test length(logs) == 3
-        @test ismatch((Debug, "a"), logs[1])
-        @test ismatch((Info , "b"), logs[2])
-        @test ismatch((Error, "d"), logs[3])
+        @test length(logs) == 1
+        @test ismatch((Warn , "c"), logs[1])
     end
 
     @testset "Log level filtering - global flag" begin
@@ -378,5 +371,7 @@ end
     |  b = asdf
     """
 end
+
+include("config.jl")
 
 end
