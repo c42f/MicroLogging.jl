@@ -200,7 +200,7 @@ end
         level::Int
     end
 
-    Base.convert(::Type{MicroLogging.LogLevel}, l::MyLevel) = MicroLogging.LogLevel(l.level)
+    Base.convert(::Type{LogLevel}, l::MyLevel) = LogLevel(l.level)
 
     const critical = MyLevel(10000)
     const debug_verbose = MyLevel(-10000)
@@ -218,14 +218,14 @@ end
 #-------------------------------------------------------------------------------
 
 @testset "SimpleLogger" begin
-    @test MicroLogging.shouldlog(SimpleLogger(STDERR), Debug) === false
-    @test MicroLogging.shouldlog(SimpleLogger(STDERR), Info) === true
-    @test MicroLogging.shouldlog(SimpleLogger(STDERR, Debug), Debug) === true
+    @test shouldlog(SimpleLogger(STDERR), Debug) === false
+    @test shouldlog(SimpleLogger(STDERR), Info) === true
+    @test shouldlog(SimpleLogger(STDERR, Debug), Debug) === true
 
     function genmsg(level, message, _module, filepath, line; kws...)
         io = IOBuffer()
         logger = SimpleLogger(io, Debug)
-        MicroLogging.handle_message(logger, level, message, _module, :group, :id,
+        handle_message(logger, level, message, _module, :group, :id,
                                     filepath, line; kws...)
         s = String(take!(io))
         # Remove the small amount of color, as `Base.print_with_color` can't be
