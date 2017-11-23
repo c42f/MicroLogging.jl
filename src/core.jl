@@ -27,7 +27,7 @@ function handle_message end
 Return true when `logger` accepts a message at `level`, generated for
 `_module`, `group` and with unique log identifier `id`.
 """
-shouldlog(::AbstractLogger, args...) = true
+shouldlog(logger, level, _module, group, id) = true
 
 """
     min_enabled_level(logger)
@@ -35,7 +35,7 @@ shouldlog(::AbstractLogger, args...) = true
 Return the maximum disabled level for `logger` for early filtering.  That is,
 the log level below or equal to which all messages are filtered.
 """
-min_enabled_level(logger::AbstractLogger) = Info
+min_enabled_level(logger) = Info
 
 """
     catch_exceptions(logger)
@@ -50,7 +50,7 @@ functionality - such as debug logging - in a production system.
 If you want to use logging as an audit trail you should disable this for your
 logger type.
 """
-catch_exceptions(logger::AbstractLogger) = true
+catch_exceptions(logger) = true
 
 
 # The logger equivalent of /dev/null, for when a placeholder is needed
