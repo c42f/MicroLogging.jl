@@ -30,3 +30,18 @@
     @test ismatch((Debug, "a"), logs[1])
     @test ismatch((Info , "b"), logs[2])
 end
+
+@testset "disable_logging with parse_level" begin
+    # Test utility: Log once at each standard level
+    function log_each_level()
+        @debug "a"
+        @info  "b"
+        @warn  "c"
+        @error "d"
+    end
+
+    disable_logging("Info")
+    @test_logs (Warn, "c") (Error, "d")  log_each_level()
+
+    disable_logging(BelowMinLevel)
+end

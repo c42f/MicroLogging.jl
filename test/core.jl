@@ -150,9 +150,6 @@ end
         disable_logging(Warn)
         @test_logs (Error, "d")  log_each_level()
 
-        disable_logging("Warn")
-        @test_logs (Error, "d")  log_each_level()
-
         disable_logging(Error)
         @test_logs log_each_level()
 
