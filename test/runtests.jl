@@ -1,7 +1,11 @@
 using MicroLogging
 using Base.Test
 using Compat
-import MicroLogging: LogLevel, BelowMinLevel, Debug, Info, Warn, Error, AboveMaxLevel
+import MicroLogging: LogLevel, BelowMinLevel, Debug, Info, Warn, Error, AboveMaxLevel,
+    shouldlog, handle_message, min_enabled_level, catch_exceptions,
+    configure_logging
+
+import Base: ismatch
 
 if VERSION < v"0.6-"
     # Override Test.@test_broken, which is broken on julia-0.5!
@@ -13,7 +17,13 @@ end
 
 # Test helpers
 
-mutable struct LogRecord
+# A logger which does nothing, except enable exceptions to propagate
+struct AllowExceptionsLogger <: AbstractLogger ; end
+handle_message(logger::AllowExceptionsLogger) = nothing
+catch_exceptions(logger::AllowExceptionsLogger) = false
+
+# Log records
+struct LogRecord
     level
     message
     _module
@@ -22,84 +32,58 @@ mutable struct LogRecord
     file
     line
     kwargs
-    shouldlog_args
 end
-
 LogRecord(args...; kwargs...) = LogRecord(args..., kwargs)
-LogRecord(level, msg, _module=nothing, group=nothing, id=nothing, file=nothing, line=nothing; kwargs...) =
-	LogRecord(level, msg, _module, group, id, file, line, kwargs, nothing)
 
+# Logger with extra test-related state
 mutable struct TestLogger <: AbstractLogger
-    records::Vector{LogRecord}
+    logs::Vector{LogRecord}
     min_level::LogLevel
-    catch_exceptions::Bool
     shouldlog_args
 end
 
-TestLogger(min_level=BelowMinLevel; catch_exceptions=true) = TestLogger(LogRecord[], min_level, catch_exceptions, nothing)
+TestLogger(min_level=BelowMinLevel) = TestLogger(LogRecord[], min_level, nothing)
+min_enabled_level(logger::TestLogger) = logger.min_level
 
-MicroLogging.min_enabled_level(logger::TestLogger) = logger.min_level
-MicroLogging.catch_exceptions(logger::TestLogger) = logger.catch_exceptions
-
-function MicroLogging.configure_logging(logger::TestLogger; min_level=Info)
-    logger.min_level = min_level
-    logger
-end
-
-function MicroLogging.shouldlog(logger::TestLogger, level, _module, group, id)
+function shouldlog(logger::TestLogger, level, _module, group, id)
     logger.shouldlog_args = (level, _module, group, id)
     true
 end
 
-function MicroLogging.handle_message(logger::TestLogger, level, msg, _module,
-                                     group, id, file, line; kwargs...)
-    push!(logger.records, LogRecord(level, msg, _module, group, id, file, line,
-                                    kwargs, logger.shouldlog_args))
+function handle_message(logger::TestLogger, level, msg, _module,
+                        group, id, file, line; kwargs...)
+    push!(logger.logs, LogRecord(level, msg, _module, group, id, file, line, kwargs))
 end
 
-function collect_logs(f::Function, min_level=BelowMinLevel)
+function configure_logging(logger::TestLogger; min_level=Info)
+    logger.min_level = min_level
+    logger
+end
+
+function collect_test_logs(f; min_level=Debug)
     logger = TestLogger(min_level)
     with_logger(f, logger)
-    logger.records
+    logger.logs
 end
 
-function record_matches(r, ref::Tuple)
-    if length(ref) == 1
-        return (r.level,) == ref
-    else
-        return (r.level, r.message) == ref
-    end
-end
-
-function record_matches(r, ref::LogRecord)
-    (r.level, r.message) == (ref.level, ref.message)       || return false
-    (ref._module  == nothing || r._module  == ref._module) || return false
-    (ref.group    == nothing || r.group    == ref.group)   || return false
-    (ref.id       == nothing || r.id       == ref.id)      || return false
-    (ref.file     == nothing || r.file     == ref.file)    || return false
-    (ref.line     == nothing || r.line     == ref.line)    || return false
-    rkw = Dict(r.kwargs)
-    for (k,v) in ref.kwargs
-        (haskey(rkw, k) && rkw[k] == v) || return false
-    end
-    return true
-end
-
-# Use superset operator for improved log message reporting in @test
-⊃(r::LogRecord, ref) = record_matches(r, ref)
 
 macro test_logs(exs...)
     length(exs) >= 1 || throw(ArgumentError("""`@test_logs` needs at least one arguments.
                                Usage: `@test_logs [msgs...] expr_to_run`"""))
-    quote
+    ex = quote
         @test ismatch_logs($(exs[1:end-1]...)) do
             $(esc(exs[end]))
         end
     end
+    if Compat.macros_have_sourceloc
+        # Propagate source code location of @test_logs to @test macro
+        ex.args[2].args[2] = __source__
+    end
+    ex
 end
 
 function ismatch_logs(f, patterns...)
-    logs = collect_logs(f)
+    logs = collect_test_logs(f, min_level=BelowMinLevel)
     length(logs) == length(patterns) || return false
     for (pattern,log) in zip(patterns, logs)
         ismatch(pattern, log) || return false
@@ -107,12 +91,9 @@ function ismatch_logs(f, patterns...)
     return true
 end
 
-function Base.ismatch(ref::Tuple, r::LogRecord)
-    if length(ref) == 1
-        return (r.level,) == ref
-    else
-        return (r.level, r.message) == ref
-    end
+function ismatch(ref::Tuple, r::LogRecord)
+    stdfields = (r.level, r.message, r._module, r.group, r.id, r.file, r.line)
+    ref == stdfields[1:length(ref)]
 end
 
 #-------------------------------------------------------------------------------
@@ -130,39 +111,26 @@ end
 # Front end
 
 @testset "Log message formatting" begin
-    logs = collect_logs() do
-        # Message may be formatted any way the user pleases
-        @info begin
-            A = ones(4,4)
-            "sum(A) = $(sum(A))"
-        end
-        x = 10.50
-        @info "$x"
-        @info @sprintf("%.3f", x)
+    @test_logs (Info, "sum(A) = 16.0") @info begin
+        A = ones(4,4)
+        "sum(A) = $(sum(A))"
     end
-
-    @test logs[1] ⊃ (Info, "sum(A) = 16.0")
-    @test logs[2] ⊃ (Info, "10.5")
-    @test logs[3] ⊃ (Info, "10.500")
-    @test length(logs) == 3
+    x = 10.50
+    @test_logs (Info, "10.5") @info "$x"
+    @test_logs (Info, "10.500") @info @sprintf("%.3f", x)
 end
 
 @testset "Programmatically defined levels" begin
-    logs = collect_logs() do
-        for level ∈ [Info,Warn]
-            @logmsg level "X"
-        end
-    end
-
-    @test logs[1] ⊃ (Info, "X")
-    @test logs[2] ⊃ (Warn, "X")
-    @test length(logs) == 2
+    level = Info
+    @test_logs (Info, "X") @logmsg level "X"
+    level = Warn
+    @test_logs (Warn, "X") @logmsg level "X"
 end
 
 @testset "Structured logging with key value pairs" begin
     foo_val = 10
     bar_val = 100
-    logs = collect_logs() do
+    logs = collect_test_logs() do
         @info "test"  bar_val  progress=0.1  foo=foo_val  2*3  real_line=(@__LINE__)
         @info begin
             value_in_msg_block = 1000.0
@@ -193,13 +161,13 @@ end
 
     # Keyword values accessible from message block
     record2 = logs[2]
-    @test record2 ⊃ (Info,"test2")
+    @test ismatch((Info,"test2"), record2)
     kwargs = Dict(record2.kwargs)
     @test kwargs[:value_in_msg_block] === 1000.0
 
     # Splatting of keywords
     record3 = logs[3]
-    @test record3 ⊃ (Info,"test3")
+    @test ismatch((Info,"test3"), record3)
     kwargs = Dict(record3.kwargs)
     @test sort(collect(keys(kwargs))) == [:a, :b]
     @test kwargs[:a] === 1
@@ -207,35 +175,31 @@ end
 end
 
 @testset "Log message exception handling" begin
-    # Errors are caught by default
-    logs = collect_logs() do
-        @info "foo $(1÷0)"
-        @info "bar"
-    end
-    @test logs[1] ⊃ (Error,)
-    @test logs[2] ⊃ (Info,"bar")
-    @test length(logs) == 2
-    @test_throws DivideError with_logger(TestLogger(catch_exceptions=false)) do
+    # Exceptions in message creation are caught by default
+    @test_logs (Error,) @info "foo $(1÷0)"
+    # Exceptions propagate if explicitly disabled for the logger type
+    @test_throws DivideError with_logger(AllowExceptionsLogger()) do
         @info "foo $(1÷0)"
     end
 end
 
 @testset "Special keywords" begin
-    logs = collect_logs() do
+    logger = TestLogger()
+    with_logger(logger) do
         @info "foo" _module=MicroLogging _id=:asdf _group=:somegroup _file="/a/file" _line=-10
     end
-    @test length(logs) == 1
-    record = logs[1]
+    @test length(logger.logs) == 1
+    record = logger.logs[1]
     @test record._module == MicroLogging
     @test record.group == :somegroup
     @test record.id == :asdf
     @test record.file == "/a/file"
     @test record.line == -10
     # Test consistency with shouldlog() function arguments
-    @test record.level   == record.shouldlog_args[1]
-    @test record._module == record.shouldlog_args[2]
-    @test record.group   == record.shouldlog_args[3]
-    @test record.id      == record.shouldlog_args[4]
+    @test record.level   == logger.shouldlog_args[1]
+    @test record._module == logger.shouldlog_args[2]
+    @test record.group   == logger.shouldlog_args[3]
+    @test record.id      == logger.shouldlog_args[4]
 end
 
 
@@ -244,89 +208,75 @@ end
 
 @testset "Early log filtering" begin
     @testset "Log filtering, per task logger" begin
-        logs = collect_logs() do
-            @debug "a"
-            configure_logging(min_level=Info)
-            @debug "a"
-            @info  "b"
-            configure_logging(min_level=Error)
-            @warn  "c"
-            @error "d"
+        logs = let
+            logger = TestLogger()
+            with_logger(logger) do
+                @debug "a"
+                configure_logging(min_level=Info)
+                @debug "a"
+                @info  "b"
+                configure_logging(min_level=Error)
+                @warn  "c"
+                @error "d"
+            end
+            logger.logs
         end
-
-        @test logs[1] ⊃ (Debug, "a")
-        @test logs[2] ⊃ (Info , "b")
-        @test logs[3] ⊃ (Error, "d")
         @test length(logs) == 3
+        @test ismatch((Debug, "a"), logs[1])
+        @test ismatch((Info , "b"), logs[2])
+        @test ismatch((Error, "d"), logs[3])
     end
 
     @testset "Log filtering, global logger" begin
         # Same test as above, but with global logger
         old_logger = global_logger()
-        logger = TestLogger(Debug)
-        global_logger(logger)
-        @debug "a"
-        configure_logging(min_level=Info)
-        @debug "a"
-        @info  "b"
-        configure_logging(min_level=Error)
-        @test_throws ArgumentError configure_logging("unknown_argument")
-        @warn  "c"
-        @error "d"
-        logs = logger.records
+        logs = let
+            logger = TestLogger(Debug)
+            global_logger(logger)
+            @debug "a"
+            configure_logging(min_level=Info)
+            @debug "a"
+            @info  "b"
+            configure_logging(min_level=Error)
+            @test_throws ArgumentError configure_logging("unknown_argument")
+            @warn  "c"
+            @error "d"
+            logger.logs
+        end
         global_logger(old_logger)
 
-        @test logs[1] ⊃ (Debug, "a")
-        @test logs[2] ⊃ (Info , "b")
-        @test logs[3] ⊃ (Error, "d")
         @test length(logs) == 3
+        @test ismatch((Debug, "a"), logs[1])
+        @test ismatch((Info , "b"), logs[2])
+        @test ismatch((Error, "d"), logs[3])
     end
 
     @testset "Log level filtering - global flag" begin
         # Test utility: Log once at each standard level
         function log_each_level()
-            collect_logs() do
-                @debug "a"
-                @info  "b"
-                @warn  "c"
-                @error "d"
-            end
+            @debug "a"
+            @info  "b"
+            @warn  "c"
+            @error "d"
         end
 
         disable_logging(BelowMinLevel)
-        logs = log_each_level()
-        @test logs[1] ⊃ (Debug, "a")
-        @test logs[2] ⊃ (Info , "b")
-        @test logs[3] ⊃ (Warn , "c")
-        @test logs[4] ⊃ (Error, "d")
-        @test length(logs) == 4
+        @test_logs (Debug, "a") (Info, "b") (Warn, "c") (Error, "d")  log_each_level()
 
         disable_logging(Debug)
-        logs = log_each_level()
-        @test logs[1] ⊃ (Info , "b")
-        @test logs[2] ⊃ (Warn , "c")
-        @test logs[3] ⊃ (Error, "d")
-        @test length(logs) == 3
+        @test_logs (Info, "b") (Warn, "c") (Error, "d")  log_each_level()
 
         disable_logging(Info)
-        logs = log_each_level()
-        @test logs[1] ⊃ (Warn , "c")
-        @test logs[2] ⊃ (Error, "d")
-        @test length(logs) == 2
+        @test_logs (Warn, "c") (Error, "d")  log_each_level()
 
         disable_logging(Warn)
-        logs = log_each_level()
-        @test logs[1] ⊃ (Error, "d")
-        @test length(logs) == 1
+        @test_logs (Error, "d")  log_each_level()
 
         disable_logging("Warn")
-        logs = log_each_level()
-        @test logs[1] ⊃ (Error, "d")
-        @test length(logs) == 1
+        @test_logs (Error, "d")  log_each_level()
 
         disable_logging(Error)
-        logs = log_each_level()
-        @test length(logs) == 0
+        @test_logs log_each_level()
 
         # Reset to default
         disable_logging(BelowMinLevel)
@@ -335,13 +285,13 @@ end
 
 #-------------------------------------------------------------------------------
 
-@eval module A
+@eval module LogModuleTest
     using MicroLogging
     function a()
         @info  "a"
     end
 
-    module B
+    module Submodule
         using MicroLogging
         function b()
             @info  "b"
@@ -350,14 +300,14 @@ end
 end
 
 @testset "Capture of module information" begin
-    logs = collect_logs() do
-        A.a()
-        A.B.b()
-    end
-
-    @test logs[1] ⊃ LogRecord(Info, "a", A)
-    @test logs[2] ⊃ LogRecord(Info, "b", A.B)
-    @test length(logs) == 2
+    @test_logs(
+        (Info, "a", LogModuleTest),
+        (Info, "b", LogModuleTest.Submodule),
+        begin
+            LogModuleTest.a()
+            LogModuleTest.Submodule.b()
+        end
+    )
 end
 
 
@@ -379,13 +329,11 @@ end
 end
 
 @testset "Custom log levels" begin
-    logs = collect_logs(Info) do
-        @logmsg LogLevelTest.critical "blah"
+    @test_logs (LogLevelTest.critical, "blah") @logmsg LogLevelTest.critical "blah"
+    logs = collect_test_logs(min_level=Debug) do
         @logmsg LogLevelTest.debug_verbose "blah"
     end
-
-    @test logs[1] ⊃ (LogLevelTest.critical, "blah")
-    @test length(logs) == 1
+    @test length(logs) == 0
 end
 
 
