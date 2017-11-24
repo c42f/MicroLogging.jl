@@ -86,7 +86,7 @@ pattern field is a `Regex`.
 Consider a function which logs a warning, and several debug messages:
 
     function foo(n)
-        @info "Doing foo"
+        @info "Doing foo with n=\$n"
         for i=1:n
             @debug "Iteration \$i"
         end
@@ -94,12 +94,12 @@ Consider a function which logs a warning, and several debug messages:
 
 We can test the info message using
 
-    @test_logs (Info,"Doing foo with n=4") foo(4)
+    @test_logs (Info,"Doing foo with n=2") foo(2)
 
 If we also wanted to test the debug messages, these need to be enabled with the
 `min_level` keyword:
 
-    @test_logs (Info,"Doing foo with n=4") (Debug,"Iteration 1") (Debug,"Iteration 2") min_level=Debug foo(2)
+    @test_logs (Info,"Doing foo with n=2") (Debug,"Iteration 1") (Debug,"Iteration 2") min_level=Debug foo(2)
 
 """
 macro test_logs(exs...)
