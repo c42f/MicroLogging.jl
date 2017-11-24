@@ -46,6 +46,10 @@ include("loggers.jl")
 
 include("config.jl")
 
+#if !core_in_base
+    include("test.jl")
+#end
+
 function __init__()
     global_logger(InteractiveLogger(STDERR))
 end
