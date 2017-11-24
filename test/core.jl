@@ -76,10 +76,11 @@ end
 
 @testset "Log message exception handling" begin
     # Exceptions in message creation are caught by default
-    @test_logs (Error,) @info "foo $(1÷0)"
-    # Exceptions propagate if explicitly disabled for the logger type
-    @test_throws DivideError with_logger(AllowExceptionsLogger()) do
-        @info "foo $(1÷0)"
+    @test_logs (Error,) catch_exceptions=true  @info "foo $(1÷0)"
+    # Exceptions propagate if explicitly disabled for the logger (by default
+    # for the test logger)
+    @test_throws DivideError collect_test_logs() do
+        @info  "foo $(1÷0)"
     end
 end
 
@@ -117,7 +118,7 @@ end
     @testset "Log filtering, global logger" begin
         old_logger = global_logger()
         logs = let
-            logger = TestLogger(Warn)
+            logger = TestLogger(min_level=Warn)
             global_logger(logger)
             @info "b"
             @warn "c"

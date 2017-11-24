@@ -16,7 +16,7 @@
     # Same test as above, but with global logger
     old_logger = global_logger()
     logs = let
-        logger = TestLogger(Debug)
+        logger = TestLogger(min_level=Debug)
         global_logger(logger)
         @debug "a"
         configure_logging(min_level=Info)
