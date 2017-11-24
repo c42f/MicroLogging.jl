@@ -1,6 +1,6 @@
 @testset "Logger configuration" begin
     logs = let
-        logger = TestLogger()
+        logger = TestLogger(min_level=Debug)
         with_logger(logger) do
             @debug "a"
             configure_logging(min_level=Info)

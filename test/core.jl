@@ -1,7 +1,7 @@
 @testset "Core Logging" begin
 
 @testset "Basic logging" begin
-    @test_logs (Debug, "a") @debug "a"
+    @test_logs (Debug, "a") min_level=Debug @debug "a"
     @test_logs (Info,  "a") @info  "a"
     @test_logs (Warn,  "a") @warn  "a"
     @test_logs (Error, "a") @error "a"
@@ -140,16 +140,16 @@ end
         end
 
         disable_logging(BelowMinLevel)
-        @test_logs (Debug, "a") (Info, "b") (Warn, "c") (Error, "d")  log_each_level()
+        @test_logs (Debug, "a") (Info, "b") (Warn, "c") (Error, "d")  min_level=Debug log_each_level()
 
         disable_logging(Debug)
-        @test_logs (Info, "b") (Warn, "c") (Error, "d")  log_each_level()
+        @test_logs (Info, "b") (Warn, "c") (Error, "d")  min_level=Debug log_each_level()
 
         disable_logging(Info)
-        @test_logs (Warn, "c") (Error, "d")  log_each_level()
+        @test_logs (Warn, "c") (Error, "d")  min_level=Debug log_each_level()
 
         disable_logging(Warn)
-        @test_logs (Error, "d")  log_each_level()
+        @test_logs (Error, "d")  min_level=Debug log_each_level()
 
         disable_logging(Error)
         @test_logs log_each_level()
