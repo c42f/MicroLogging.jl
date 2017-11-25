@@ -1,5 +1,6 @@
 module Test
 
+using MicroLogging
 import MicroLogging: parse_level
 
 export @test_logs
