@@ -113,7 +113,7 @@ macro test_logs(exs...)
     kwargs = Any[]
     for e in exs[1:end-1]
         if e isa Expr && e.head == :(=)
-            push!(kwargs, Expr(:kw, e.args...))
+            push!(kwargs, esc(Expr(:kw, e.args...)))
         else
             push!(args, esc(e))
         end
