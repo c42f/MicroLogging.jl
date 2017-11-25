@@ -3,6 +3,7 @@ using Base.Test
 
 #if !MicroLogging.core_in_base
     using MicroLogging.Test
+import MicroLogging.Test: @test_logs
 #end
 
 using Compat

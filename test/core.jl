@@ -87,11 +87,11 @@ end
 @testset "Special keywords" begin
     logger = TestLogger()
     with_logger(logger) do
-        @info "foo" _module=MicroLogging _id=:asdf _group=:somegroup _file="/a/file" _line=-10
+        @info "foo" _module=Base.Core _id=:asdf _group=:somegroup _file="/a/file" _line=-10
     end
     @test length(logger.logs) == 1
     record = logger.logs[1]
-    @test record._module == MicroLogging
+    @test record._module == Base.Core
     @test record.group == :somegroup
     @test record.id == :asdf
     @test record.file == "/a/file"
@@ -140,16 +140,16 @@ end
         end
 
         disable_logging(BelowMinLevel)
-        @test_logs (Debug, "a") (Info, "b") (Warn, "c") (Error, "d")  min_level=Debug log_each_level()
+        @test_logs (Debug, "a") (Info, "b") (Warn, "c") (Error, "d") min_level=Debug  log_each_level()
 
         disable_logging(Debug)
-        @test_logs (Info, "b") (Warn, "c") (Error, "d")  min_level=Debug log_each_level()
+        @test_logs (Info, "b") (Warn, "c") (Error, "d") min_level=Debug  log_each_level()
 
         disable_logging(Info)
-        @test_logs (Warn, "c") (Error, "d")  min_level=Debug log_each_level()
+        @test_logs (Warn, "c") (Error, "d") min_level=Debug  log_each_level()
 
         disable_logging(Warn)
-        @test_logs (Error, "d")  min_level=Debug log_each_level()
+        @test_logs (Error, "d") min_level=Debug  log_each_level()
 
         disable_logging(Error)
         @test_logs log_each_level()

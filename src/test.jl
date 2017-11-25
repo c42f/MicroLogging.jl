@@ -1,5 +1,7 @@
 module Test
 
+import MicroLogging: parse_level
+
 export @test_logs
 
 # Log testing tools
@@ -75,11 +77,13 @@ The `keywords` provide some simple filtering of log records: the `min_level`
 keyword controls the minimum log level which will be collected for the test.
 
 The most useful log pattern is a simple tuple of the form `(level,message)`.
-More or less tuple elements may be added corresponding to the arguments to
-passed to `AbstractLogger` via the `handle_message` function:
-`(level,message,module,group,id,file,line)`.  Elements which are present will
-be matched pairwise with the log record fields using `==` or `ismatch` when the
-pattern field is a `Regex`.
+A different number of tuple elements may be used to match other log metadata,
+corresponding to the arguments to passed to `AbstractLogger` via the
+`handle_message` function: `(level,message,module,group,id,file,line)`.
+Elements which are present will be matched pairwise with the log record fields
+using `==` by default, with the special cases that `Symbol`s may be used for
+the standard log levels, and `Regex`s in the pattern will match string or
+Symbol fields using `ismatch`.
 
 # Examples
 
@@ -94,12 +98,12 @@ Consider a function which logs a warning, and several debug messages:
 
 We can test the info message using
 
-    @test_logs (Info,"Doing foo with n=2") foo(2)
+    @test_logs (:info,"Doing foo with n=2") foo(2)
 
 If we also wanted to test the debug messages, these need to be enabled with the
 `min_level` keyword:
 
-    @test_logs (Info,"Doing foo with n=2") (Debug,"Iteration 1") (Debug,"Iteration 2") min_level=Debug foo(2)
+    @test_logs (:info,"Doing foo with n=2") (:debug,"Iteration 1") (:debug,"Iteration 2") min_level=Debug foo(2)
 
 """
 macro test_logs(exs...)
@@ -139,6 +143,7 @@ end
 logfield_ismatch(a, b) = a == b
 logfield_ismatch(r::Regex, b) = ismatch(r, b)
 logfield_ismatch(r::Regex, b::Symbol) = ismatch(r, String(b))
+logfield_ismatch(a::Symbol, b::LogLevel) = parse_level(a) == b
 
 function ismatch(pattern::Tuple, r::LogRecord)
     stdfields = (r.level, r.message, r._module, r.group, r.id, r.file, r.line)
