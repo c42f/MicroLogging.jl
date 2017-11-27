@@ -1,4 +1,4 @@
-@testset "Tests for @test_logs macro" begin
+@testset "@test_logs" begin
     function foo(n)
         @info "Doing foo with n=$n"
         for i=1:n
@@ -20,4 +20,37 @@
 
     # Debug level log collection
     @test_logs (Info,"Doing foo with n=2") (Debug,"Iteration 1") (Debug,"Iteration 2") min_level=Debug foo(2)
+
+    @test_logs (Debug,"Iteration 5") min_level=Debug match_mode=:any foo(10)
+
+    # Test failures
+    fails = @testset NoThrowTestSet "check that @test_logs detects bad input" begin
+        @test_logs (Warn,) foo(1)
+        @test_logs (Warn,) match_mode=:any @info "foo"
+        @test_logs (Debug,) @debug "foo"
+    end
+    @test length(fails) == 3
+    @test fails[1] isa Test.Fail
+    @test fails[2] isa Test.Fail
+    @test fails[3] isa Test.Fail
+end
+
+if MicroLogging.core_in_base
+# Can't meaningfully use @test_deprecated, except with support in Base
+function newfunc()
+    true
+end
+@deprecate oldfunc newfunc
+
+@testset "@test_deprecated" begin
+    @test_deprecated oldfunc()
+
+    fails = @testset NoThrowTestSet "check that @test_deprecated detects bad input" begin
+        @test_deprecated newfunc()
+        @test_deprecated r"Not found in message" oldfunc()
+    end
+    @test length(fails) == 2
+    @test fails[1] isa Test.Fail
+    @test fails[2] isa Test.Fail
+end
 end
