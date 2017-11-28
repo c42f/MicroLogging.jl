@@ -63,8 +63,8 @@ end
 
 function collect_test_logs(f; kwargs...)
     logger = TestLogger(; kwargs...)
-    with_logger(f, logger)
-    logger.logs
+    value = with_logger(f, logger)
+    logger.logs, value
 end
 
 
@@ -126,9 +126,7 @@ macro test_logs(exs...)
     end
     # TODO: Better error reporting in @test
     ex = quote
-        @test ismatch_logs($(args...); $(kwargs...)) do
-            $(esc(exs[end]))
-        end
+        @test ismatch_logs(()->$(esc(exs[end])), $(args...); $(kwargs...))[1]
     end
     if Compat.macros_have_sourceloc
         # Propagate source code location of @test_logs to @test macro
@@ -138,13 +136,14 @@ macro test_logs(exs...)
 end
 
 function ismatch_logs(f, patterns...; match_mode::Symbol=:all, kwargs...)
-    logs = collect_test_logs(f; kwargs...)
+    logs,value = collect_test_logs(f; kwargs...)
     if match_mode == :all
-        length(logs) == length(patterns) &&
+        didmatch = length(logs) == length(patterns) &&
             all(ismatch(p,l) for (p,l) in zip(patterns, logs))
     elseif match_mode == :any
-        all(any(ismatch(p,l) for l in logs) for p in patterns)
+        didmatch = all(any(ismatch(p,l) for l in logs) for p in patterns)
     end
+    didmatch,value
 end
 
 logfield_ismatch(a, b) = a == b
