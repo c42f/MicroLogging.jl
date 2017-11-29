@@ -18,6 +18,9 @@
     @test_logs (:warn,)  @warn  "foo"
     @test_logs (:error,) @error "foo"
 
+    # Pass through so the value of the expression can also be tested
+    @test (@test_logs (Info,"blah") (@info "blah"; 42)) == 42
+
     # Debug level log collection
     @test_logs (Info,"Doing foo with n=2") (Debug,"Iteration 1") (Debug,"Iteration 2") min_level=Debug foo(2)
 
@@ -30,27 +33,30 @@
         @test_logs (Debug,) @debug "foo"
     end
     @test length(fails) == 3
-    @test fails[1] isa Test.Fail
-    @test fails[2] isa Test.Fail
-    @test fails[3] isa Test.Fail
+    @test fails[1] isa LogTestFailure
+    @test fails[2] isa LogTestFailure
+    @test fails[3] isa LogTestFailure
 end
 
 if MicroLogging.core_in_base
 # Can't meaningfully use @test_deprecated, except with support in Base
 function newfunc()
-    true
+    42
 end
 @deprecate oldfunc newfunc
 
 @testset "@test_deprecated" begin
     @test_deprecated oldfunc()
 
+    # Expression passthrough
+    @test (@test_deprecated oldfunc()) == 42
+
     fails = @testset NoThrowTestSet "check that @test_deprecated detects bad input" begin
         @test_deprecated newfunc()
         @test_deprecated r"Not found in message" oldfunc()
     end
     @test length(fails) == 2
-    @test fails[1] isa Test.Fail
-    @test fails[2] isa Test.Fail
+    @test fails[1] isa LogTestFailure
+    @test fails[2] isa LogTestFailure
 end
 end

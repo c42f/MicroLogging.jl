@@ -1,13 +1,12 @@
 using MicroLogging
-using Base.Test
+using Compat
+using Compat.Test
 
 #if !MicroLogging.core_in_base
     using MicroLogging.LogTest
     import MicroLogging.LogTest: @test_logs, @test_deprecated
-    import MicroLogging.LogTest: collect_test_logs, TestLogger
+    import MicroLogging.LogTest: collect_test_logs, TestLogger, LogTestFailure
 #end
-
-using Compat
 
 import MicroLogging: BelowMinLevel, Debug, Info, Warn, Error, AboveMaxLevel,
     shouldlog, handle_message, min_enabled_level, catch_exceptions,

@@ -7,8 +7,15 @@ export @test_logs, @test_deprecated
 
 # Log testing tools
 
-using Base.Test
 using Compat
+
+using Compat.Test
+
+import Compat.Test: record,
+             scrub_backtrace,
+             Result, Pass, Fail,
+             DefaultTestSet, FallbackTestSet, FallbackTestSetException
+
 import MicroLogging: BelowMinLevel, Debug, Info, Warn, Error, AboveMaxLevel,
     shouldlog, handle_message, min_enabled_level, catch_exceptions,
     configure_logging
@@ -71,6 +78,52 @@ end
 #-------------------------------------------------------------------------------
 # Log testing tools
 
+# Failure result type for log testing
+mutable struct LogTestFailure <: Result
+    orig_expr
+    source::Union{Void,LineNumberNode}
+    patterns
+    logs
+end
+function Base.show(io::IO, t::LogTestFailure)
+    print_with_color(Base.error_color(), io, "Log Test Failed"; bold = true)
+    if Compat.macros_have_sourceloc
+        print(io, " at ")
+        print_with_color(:default, io, t.source.file, ":", t.source.line, "\n"; bold = true)
+    else
+        println(io) # For 0.6 compat
+    end
+    println(io, "  Expression: ", t.orig_expr)
+    println(io, "  Log Pattern: ", join(t.patterns, " "))
+    println(io, "  Captured Logs: ")
+    for l in t.logs
+        println(io, "    ", l)
+    end
+end
+
+# Patch support for LogTestFailure into Base.Test test set types
+# TODO: Would be better if `Test` itself allowed us to handle this more neatly.
+function record(::FallbackTestSet, t::LogTestFailure)
+    println(t)
+    throw(FallbackTestSetException("There was an error during testing"))
+end
+
+function record(ts::DefaultTestSet, t::LogTestFailure)
+    if myid() == 1
+        print_with_color(:white, ts.description, ": ")
+        print(t)
+        Base.show_backtrace(STDOUT, scrub_backtrace(backtrace()))
+        println()
+    end
+    # Hack: convert to `Fail` so that test summarization works correctly
+    if VERSION < v"0.7-DEV"
+        push!(ts.results, Fail(:test, t.orig_expr, t.logs, nothing))
+    else
+        push!(ts.results, Fail(:test, t.orig_expr, t.logs, nothing, t.source))
+    end
+    t
+end
+
 """
     @test_logs [log_patterns...] [keywords] expression
 
@@ -115,27 +168,44 @@ If we also wanted to test the debug messages, these need to be enabled with the
 macro test_logs(exs...)
     length(exs) >= 1 || throw(ArgumentError("""`@test_logs` needs at least one arguments.
                                Usage: `@test_logs [msgs...] expr_to_run`"""))
-    args = Any[]
+    patterns = Any[]
     kwargs = Any[]
     for e in exs[1:end-1]
         if e isa Expr && e.head == :(=)
             push!(kwargs, esc(Expr(:kw, e.args...)))
         else
-            push!(args, esc(e))
+            push!(patterns, esc(e))
         end
     end
-    # TODO: Better error reporting in @test
-    ex = quote
-        @test ismatch_logs(()->$(esc(exs[end])), $(args...); $(kwargs...))[1]
-    end
-    if Compat.macros_have_sourceloc
-        # Propagate source code location of @test_logs to @test macro
-        ex.args[2].args[2] = __source__
-    end
-    ex
+    expression = exs[end]
+    orig_expr = Expr(:inert, expression)
+    sourceloc = Compat.macros_have_sourceloc ? QuoteNode(__source__) : nothing
+    Base.remove_linenums!(quote
+        let testres=nothing, value=nothing
+            try
+                didmatch,logs,value = match_logs($(patterns...); $(kwargs...)) do
+                    $(esc(expression))
+                end
+                if didmatch
+                    testres = Pass(:test, nothing, nothing, value)
+                else
+                    testres = LogTestFailure($orig_expr, $sourceloc,
+                                             $(Expr(:inert, exs[1:end-1])), logs)
+                end
+            catch e
+                # FIXME: Remove Compat junk here
+                testres = Compat.Test.Error(:test_error, $orig_expr, e,
+                                            catch_backtrace(),
+                                            $((Compat.macros_have_sourceloc ?
+                                               [sourceloc] : [])...))
+            end
+            Test.record(Test.get_testset(), testres)
+            value
+        end
+    end)
 end
 
-function ismatch_logs(f, patterns...; match_mode::Symbol=:all, kwargs...)
+function match_logs(f, patterns...; match_mode::Symbol=:all, kwargs...)
     logs,value = collect_test_logs(f; kwargs...)
     if match_mode == :all
         didmatch = length(logs) == length(patterns) &&
@@ -143,7 +213,7 @@ function ismatch_logs(f, patterns...; match_mode::Symbol=:all, kwargs...)
     elseif match_mode == :any
         didmatch = all(any(ismatch(p,l) for l in logs) for p in patterns)
     end
-    didmatch,value
+    didmatch,logs,value
 end
 
 logfield_ismatch(a, b) = a == b
@@ -157,9 +227,32 @@ function ismatch(pattern::Tuple, r::LogRecord)
     all(logfield_ismatch(p,f) for (p,f) in zip(pattern, stdfields[1:length(pattern)]))
 end
 
-if MicroLogging.core_in_base
+"""
+    @test_deprecated [pattern] expression
 
+When `--depwarn=yes`, test that `expression` emits a deprecation warning and
+return the value of `expression`.  The log message string will be matched
+against `pattern` which defaults to `r"deprecated"i`.
+
+When `--depwarn=no`, simply return the result of executing `expression`.  When
+`--depwarn=error`, check that an ErrorException is thrown.
+
+# Examples
+
+```
+# Deprecated in julia 0.7
+@test_deprecated num2hex(1)
+
+# The returned value can be tested by chaining with @test:
+@test (@test_deprecated num2hex(1)) == "0000000000000001"
+```
+"""
 macro test_deprecated(exs...)
+    if !MicroLogging.core_in_base
+        return quote
+            error("@test_deprecated not supported unless Logging is in Base")
+        end
+    end
     1 <= length(exs) <= 2 || throw(ArgumentError("""`@test_deprecated` expects one or two arguments.
                                Usage: `@test_deprecated [pattern] expr_to_run`"""))
     pattern = length(exs) == 1 ? r"deprecated"i : esc(exs[1])
@@ -173,9 +266,7 @@ macro test_deprecated(exs...)
         elseif dw == 1
             @test_logs (:warn, $pattern, Ignored(), :depwarn) match_mode=:any $expression
         else
-            # dw == 0 globally disables depwarns.  Should we set --depwarn=no
-            # to log at something higher than BelowMinLevel, so we can continue
-            # to test it here?
+            $expression
         end
     end
     if Compat.macros_have_sourceloc
@@ -184,8 +275,6 @@ macro test_deprecated(exs...)
         res.args[4].args[3].args[2].args[2].args[2] = __source__
     end
     res
-end
-
 end
 
 end
