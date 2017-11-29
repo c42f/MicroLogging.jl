@@ -184,7 +184,7 @@ macro test_logs(exs...)
         end
     end
     expression = exs[end]
-    orig_expr = Expr(:inert, expression)
+    orig_expr = QuoteNode(expression)
     sourceloc = Compat.macros_have_sourceloc ? QuoteNode(__source__) : nothing
     Base.remove_linenums!(quote
         let testres=nothing, value=nothing
@@ -196,7 +196,7 @@ macro test_logs(exs...)
                     testres = Pass(:test, nothing, nothing, value)
                 else
                     testres = LogTestFailure($orig_expr, $sourceloc,
-                                             $(Expr(:inert, exs[1:end-1])), logs)
+                                             $(QuoteNode(exs[1:end-1])), logs)
                 end
             catch e
                 # FIXME: Remove Compat junk here
@@ -277,6 +277,7 @@ macro test_deprecated(exs...)
     end
     if Compat.macros_have_sourceloc
         # Propagate source code location of @test_logs to @test macro
+        # FIXME: Use rewrite_sourceloc!() for this - see #22623
         res.args[4].args[2].args[2].args[2] = __source__
         res.args[4].args[3].args[2].args[2].args[2] = __source__
     end
