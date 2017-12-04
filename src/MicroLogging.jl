@@ -28,19 +28,19 @@ export
     InteractiveLogger
 
 # core.jl includes the code which will hopefully go into Base in 0.7
-const core_in_base = isdefined(Base, :AbstractLogger)
+const core_in_base = isdefined(Base, :CoreLogging)
 
 if core_in_base
-    import Base:
-        AbstractLogger, LogLevel,
-        BelowMinLevel, Debug, Info, Warn, Error, AboveMaxLevel,
-        disable_logging,
+    import Logging:
+        @debug, @info, @warn, @error, @logmsg,
+        AbstractLogger,
+        LogLevel, BelowMinLevel, Debug, Info, Warn, Error, AboveMaxLevel,
+        with_logger, current_logger, global_logger, disable_logging,
         handle_message, shouldlog, min_enabled_level, catch_exceptions,
-        SimpleLogger, LogState
+        SimpleLogger
 else
     include("core.jl")
 end
-
 
 include("loggers.jl")
 

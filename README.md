@@ -10,8 +10,7 @@ https://github.com/JuliaLang/Juleps/pull/30/files
 
 Logging should be useful and pleasant for the average user and package
 developer, but should meet the efficiency and flexibility demands of production
-deployment.  `MicroLogging` sets out to achieve both of these things in one
-interface.
+deployment.  `MicroLogging` tries to do both in one interface.
 
 ## Install
 
