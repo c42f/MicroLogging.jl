@@ -15,6 +15,7 @@ mutable struct InteractiveLogger <: AbstractLogger
 end
 
 function InteractiveLogger(stream::IO; min_level=Info, catch_exceptions=true)
+    Base.depwarn("InteractiveLogger is deprecated - use ConsoleLogger instead.", :InteractiveLogger)
     InteractiveLogger(stream, min_level, catch_exceptions, nothing,
              Dict{Any,Int}(), Dict{Module,LogLevel}(), Set{Any}())
 end

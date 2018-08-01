@@ -2,6 +2,8 @@ __precompile__()
 
 module MicroLogging
 
+using Compat
+
 # ----- Core API to go in Base -----
 export
     ## Logger types
@@ -42,7 +44,8 @@ else
     include("core.jl")
 end
 
-include("loggers.jl")
+include("InteractiveLogger.jl") # deprecated
+include("ConsoleLogger.jl")
 
 include("config.jl")
 
@@ -51,7 +54,7 @@ if !core_in_base
 end
 
 function __init__()
-    global_logger(InteractiveLogger(STDERR))
+    global_logger(ConsoleLogger(STDERR))
 end
 
 end
