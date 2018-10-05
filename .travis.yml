@@ -8,6 +8,10 @@ julia:
   - 0.7
   - 1.0
   - nightly
+branches:
+  only:
+    - master
+    - /^v[0-9]+\.[0-9]+\.[0-9]+$/ # version tags for Documenter.jl
 matrix:
   allow_failures:
     - julia: nightly
@@ -18,7 +22,7 @@ notifications:
 #  - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
 #  - julia -e 'Pkg.clone(pwd()); Pkg.build("MicroLogging"); Pkg.test("MicroLogging"; coverage=true)'
 after_success:
-  # push coverage results to Coveralls
-  - julia -e 'cd(Pkg.dir("MicroLogging")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'
-  # push coverage results to Codecov
-  - julia -e 'cd(Pkg.dir("MicroLogging")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
+  - if [ $TRAVIS_JULIA_VERSION = "1.0" ] && [ $TRAVIS_OS_NAME = "linux" ]; then
+      # push coverage results to Coveralls
+      julia -e 'cd(Pkg.dir("MicroLogging")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'
+    fi
