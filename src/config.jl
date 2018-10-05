@@ -26,8 +26,10 @@ filtering information.
 function configure_logging(args...; kwargs...)
     logger = configure_logging(current_logger(), args...; kwargs...)::AbstractLogger
     # FIXME: Tools for setting this should be in Base.
-    if haskey(task_local_storage(), :LOGGER_STATE)
+    if !core_in_base && haskey(task_local_storage(), :LOGGER_STATE)
         task_local_storage()[:LOGGER_STATE] = LogState(logger)
+    elseif core_in_base && current_task().logstate != nothing
+        current_task().logstate = LogState(logger)
     else
         global_logger(logger)
     end
@@ -59,3 +61,11 @@ function configure_logging(logger::ConsoleLogger, _module=nothing;
 end
 
 disable_logging(level) = disable_logging(parse_level(level))
+
+if core_in_base
+import Compat.Test: TestLogger
+function configure_logging(logger::TestLogger; min_level=Info)
+    logger.min_level = min_level
+    logger
+end
+end
