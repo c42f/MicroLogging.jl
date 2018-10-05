@@ -175,11 +175,6 @@ function print_with_decorations(io, prefixes, decoration_color, str, suffix)
     end
 end
 
-if VERSION < v"0.7.0-"
-    # Iterate over key-value pairs in keyword argument list
-    pairs(kws::Vector{Any}) = kws
-end
-
 function display_message(logger::InteractiveLogger, level, msg::AbstractString,
                          _module, group, id, filepath, line;
                          progress=nothing, once=nothing, kwargs...)
@@ -211,7 +206,7 @@ function display_message(logger::InteractiveLogger, level, msg::AbstractString,
         print_with_decorations(logger.stream, [prefix, "| "], color, msg, metastr)
         print(logger.stream, "\n")
 
-        for (k,v) in pairs(kwargs)
+        for (k,v) in kwargs
             valstr = formatmsg(v)
             kvstr = '\n' in valstr ? string(k, " =\n", formatmsg(v)) :
                                      string(k, " = ", formatmsg(v))
