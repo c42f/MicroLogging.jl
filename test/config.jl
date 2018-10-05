@@ -10,8 +10,8 @@
         logger.logs
     end
     @test length(logs) == 2
-    @test ismatch((Debug, "a"), logs[1])
-    @test ismatch((Info , "b"), logs[2])
+    @test occursin((Debug, "a"), logs[1])
+    @test occursin((Info , "b"), logs[2])
 
     # Same test as above, but with global logger
     old_logger = global_logger()
@@ -27,8 +27,8 @@
     global_logger(old_logger)
 
     @test length(logs) == 2
-    @test ismatch((Debug, "a"), logs[1])
-    @test ismatch((Info , "b"), logs[2])
+    @test occursin((Debug, "a"), logs[1])
+    @test occursin((Info , "b"), logs[2])
 end
 
 @testset "disable_logging with parse_level" begin

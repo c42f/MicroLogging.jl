@@ -15,6 +15,7 @@ mutable struct InteractiveLogger <: AbstractLogger
 end
 
 function InteractiveLogger(stream::IO; min_level=Info, catch_exceptions=true)
+    Base.depwarn("InteractiveLogger is deprecated - use ConsoleLogger instead.", :InteractiveLogger)
     InteractiveLogger(stream, min_level, catch_exceptions, nothing,
              Dict{Any,Int}(), Dict{Module,LogLevel}(), Set{Any}())
 end
@@ -68,27 +69,6 @@ function formatmsg(ex_msg::Exception, bt)
     String(take!(io))
 end
 
-# Length of a string as it will appear in the terminal (after ANSI color codes
-# are removed)
-function termlength(str)
-    N = 0
-    in_esc = false
-    for c in str
-        if in_esc
-            if c == 'm'
-                in_esc = false
-            end
-        else
-            if c == '\e'
-                in_esc = true
-            else
-                N += 1
-            end
-        end
-    end
-    return N
-end
-
 function levelstyle(level::LogLevel)
     if     level < Info  return ((:blue,   true), "D-")
     elseif level < Warn  return ((:cyan,   true), "I-")
@@ -99,19 +79,23 @@ end
 
 function handle_message(logger::InteractiveLogger, level, msg, _module, group,
                         id, file, line; kwargs...)
-    # TODO: filter max_log here...
+    # TODO: filter maxlog here...
     handle_message(logger, level, formatmsg(msg), _module, group, id,
                    file, line; kwargs...)
 end
 
 function handle_message(logger::InteractiveLogger, level, msg::AbstractString,
                         _module, group, id, filepath, line;
-                        max_log=nothing, kwargs...)
-    if max_log !== nothing
+                        max_log=nothing, maxlog=nothing, kwargs...)
+    if maxlog == nothing && max_log != nothing
+        Base.depwarn("the max_log logging keyword has become maxlog", :handle_message)
+        maxlog = max_log
+    end
+    if maxlog !== nothing
         count = get!(logger.message_counts, id, 0)
         count += 1
         logger.message_counts[id] = count
-        if count > max_log
+        if count > maxlog
             push!(logger.blacklisted_ids, id)
             return
         end
@@ -175,11 +159,6 @@ function print_with_decorations(io, prefixes, decoration_color, str, suffix)
     end
 end
 
-if VERSION < v"0.7.0-"
-    # Iterate over key-value pairs in keyword argument list
-    pairs(kws::Vector{Any}) = kws
-end
-
 function display_message(logger::InteractiveLogger, level, msg::AbstractString,
                          _module, group, id, filepath, line;
                          progress=nothing, once=nothing, kwargs...)
@@ -211,7 +190,7 @@ function display_message(logger::InteractiveLogger, level, msg::AbstractString,
         print_with_decorations(logger.stream, [prefix, "| "], color, msg, metastr)
         print(logger.stream, "\n")
 
-        for (k,v) in pairs(kwargs)
+        for (k,v) in kwargs
             valstr = formatmsg(v)
             kvstr = '\n' in valstr ? string(k, " =\n", formatmsg(v)) :
                                      string(k, " = ", formatmsg(v))

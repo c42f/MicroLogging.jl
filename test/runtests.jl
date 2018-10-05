@@ -8,11 +8,6 @@ import MicroLogging: BelowMinLevel, Debug, Info, Warn, Error, AboveMaxLevel,
 
 if MicroLogging.core_in_base
     import Compat.Test: collect_test_logs, TestLogger, LogTestFailure
-
-    function configure_logging(logger::TestLogger; min_level=Info)
-        logger.min_level = min_level
-        logger
-    end
 else
     using MicroLogging.LogTest
     import MicroLogging.LogTest: @test_logs, @test_deprecated
@@ -36,5 +31,6 @@ if !MicroLogging.core_in_base
 end
 
 include("config.jl")
+include("ConsoleLogger.jl")
 
 end

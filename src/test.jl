@@ -1,7 +1,7 @@
 module LogTest
 
 using MicroLogging
-import MicroLogging: parse_level
+import MicroLogging: parse_level, configure_logging
 
 export @test_logs, @test_deprecated
 
@@ -17,10 +17,10 @@ import Compat.Test: record,
              DefaultTestSet, FallbackTestSet, FallbackTestSetException
 
 import MicroLogging: BelowMinLevel, Debug, Info, Warn, Error, AboveMaxLevel,
-    shouldlog, handle_message, min_enabled_level, catch_exceptions,
-    configure_logging
+    shouldlog, handle_message, min_enabled_level, catch_exceptions
 
 import Base: ismatch
+import Compat: occursin
 
 #-------------------------------------------------------------------------------
 # Log records
@@ -143,7 +143,7 @@ corresponding to the arguments to passed to `AbstractLogger` via the
 Elements which are present will be matched pairwise with the log record fields
 using `==` by default, with the special cases that `Symbol`s may be used for
 the standard log levels, and `Regex`s in the pattern will match string or
-Symbol fields using `ismatch`.
+Symbol fields using `occursin`.
 
 # Examples
 
@@ -215,9 +215,9 @@ function match_logs(f, patterns...; match_mode::Symbol=:all, kwargs...)
     logs,value = collect_test_logs(f; kwargs...)
     if match_mode == :all
         didmatch = length(logs) == length(patterns) &&
-            all(ismatch(p,l) for (p,l) in zip(patterns, logs))
+            all(occursin(p,l) for (p,l) in zip(patterns, logs))
     elseif match_mode == :any
-        didmatch = all(any(ismatch(p,l) for l in logs) for p in patterns)
+        didmatch = all(any(occursin(p,l) for l in logs) for p in patterns)
     end
     didmatch,logs,value
 end
@@ -229,6 +229,11 @@ logfield_ismatch(a::Symbol, b::LogLevel) = parse_level(a) == b
 logfield_ismatch(a::Ignored, b) = true
 
 function ismatch(pattern::Tuple, r::LogRecord)
+    Base.depwarn("MicroLogging.ismatch is deprecated - use occursin instead.", :ismatch)
+    occursin(pattern, r)
+end
+
+function occursin(pattern::Tuple, r::LogRecord)
     stdfields = (r.level, r.message, r._module, r.group, r.id, r.file, r.line)
     all(logfield_ismatch(p,f) for (p,f) in zip(pattern, stdfields[1:length(pattern)]))
 end

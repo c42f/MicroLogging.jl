@@ -26,8 +26,10 @@ filtering information.
 function configure_logging(args...; kwargs...)
     logger = configure_logging(current_logger(), args...; kwargs...)::AbstractLogger
     # FIXME: Tools for setting this should be in Base.
-    if haskey(task_local_storage(), :LOGGER_STATE)
+    if !core_in_base && haskey(task_local_storage(), :LOGGER_STATE)
         task_local_storage()[:LOGGER_STATE] = LogState(logger)
+    elseif core_in_base && current_task().logstate != nothing
+        current_task().logstate = LogState(logger)
     else
         global_logger(logger)
     end
@@ -41,4 +43,29 @@ function configure_logging(logger::SimpleLogger, args...; min_level=Info, kwargs
     SimpleLogger(logger.stream, parse_level(min_level))
 end
 
+function configure_logging(logger::ConsoleLogger, _module=nothing;
+                           min_level=Info)
+    min_level = parse_level(min_level)
+    #=
+    # TODO: Re-add per-module limits as in InteractiveLogger?
+    if _module == nothing
+        empty!(logger.module_limits)
+        logger.min_level = min_level
+    else
+        # Per-module log limiting
+        logger.module_limits[_module] = min_level
+    end
+    =#
+    ConsoleLogger(logger.stream, min_level, logger.meta_formatter,
+                  logger.show_limited, logger.right_justify, logger.message_limits)
+end
+
 disable_logging(level) = disable_logging(parse_level(level))
+
+if core_in_base
+import Compat.Test: TestLogger
+function configure_logging(logger::TestLogger; min_level=Info)
+    logger.min_level = min_level
+    logger
+end
+end

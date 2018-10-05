@@ -61,13 +61,13 @@ end
 
     # Keyword values accessible from message block
     record2 = logs[2]
-    @test ismatch((Info,"test2"), record2)
+    @test occursin((Info,"test2"), record2)
     kwargs = Dict(record2.kwargs)
     @test kwargs[:value_in_msg_block] === 1000.0
 
     # Splatting of keywords
     record3 = logs[3]
-    @test ismatch((Info,"test3"), record3)
+    @test occursin((Info,"test3"), record3)
     kwargs = Dict(record3.kwargs)
     @test sort(collect(keys(kwargs))) == [:a, :b]
     @test kwargs[:a] === 1
@@ -127,7 +127,7 @@ end
         global_logger(old_logger)
 
         @test length(logs) == 1
-        @test ismatch((Warn , "c"), logs[1])
+        @test occursin((Warn , "c"), logs[1])
     end
 
     @testset "Log level filtering - global flag" begin

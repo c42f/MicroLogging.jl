@@ -2,10 +2,12 @@ __precompile__()
 
 module MicroLogging
 
-# ----- Core API to go in Base -----
+using Compat
+
+# ----- Core API (in Base as of julia-0.7) -----
 export
     ## Logger types
-    AbstractLogger, LogLevel, NullLogger,
+    AbstractLogger, LogLevel, NullLogger, SimpleLogger,
     # Public logger API:
     #   handle_message, shouldlog, min_enabled_level, catch_exceptions
     # (not exported, as they're not generally called by users)
@@ -13,36 +15,34 @@ export
     ## Log creation
     @debug, @info, @warn, @error, @logmsg,
     ## Logger installation and control
-    # TODO: Should some of these go into stdlib ?
     with_logger, current_logger, global_logger, disable_logging
 
-# ----- API to go in StdLib package ? -----
+# ----- MicroLogging & stdlib Logging API -----
 export
-    SimpleLogger, # Possibly needed in Base?
     # TODO: configure_logging needs a big rethink (see, eg, python's logger
     # config system)
-    configure_logging
-
-# ----- MicroLogging stuff, for now -----
-export
+    configure_logging,
+    ConsoleLogger,
     InteractiveLogger
 
-# core.jl includes the code which will hopefully go into Base in 0.7
 const core_in_base = isdefined(Base, :CoreLogging)
 
 if core_in_base
-    import Logging:
+    import Base.CoreLogging:
         @debug, @info, @warn, @error, @logmsg,
-        AbstractLogger,
-        LogLevel, BelowMinLevel, Debug, Info, Warn, Error, AboveMaxLevel,
-        with_logger, current_logger, global_logger, disable_logging,
+        AbstractLogger, LogLevel,
+        BelowMinLevel, Debug, Info, Warn, Error, AboveMaxLevel,
+        disable_logging,
         handle_message, shouldlog, min_enabled_level, catch_exceptions,
-        SimpleLogger
+        SimpleLogger, LogState,
+        with_logger, current_logger, global_logger, disable_logging
 else
+    # 0.6-specific code which went into Base in 0.7
     include("core.jl")
 end
 
-include("loggers.jl")
+include("ConsoleLogger.jl")
+include("InteractiveLogger.jl") # deprecated
 
 include("config.jl")
 
@@ -51,7 +51,7 @@ if !core_in_base
 end
 
 function __init__()
-    global_logger(InteractiveLogger(STDERR))
+    global_logger(ConsoleLogger(stderr))
 end
 
 end

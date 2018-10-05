@@ -1,3 +1,3 @@
-julia 0.6
-Compat 0.33.0
-FastClosures
+julia 0.6 2.0
+Compat 0.62.0
+FastClosures 0.2
