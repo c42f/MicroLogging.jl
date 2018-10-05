@@ -24,7 +24,7 @@ end
 configure_logging(min_level=:debug)
 @debug "Logging enabled at debug level and above"
 for i=1:10
-    @warn "Log suppression iteration $i (max_log=2)" max_log=2
+    @warn "Log suppression iteration $i (maxlog=2)" maxlog=2
 end
 module LogTest
     using MicroLogging

@@ -4,13 +4,15 @@
 
 [![codecov.io](http://codecov.io/github/c42f/MicroLogging.jl/coverage.svg?branch=master)](http://codecov.io/github/c42f/MicroLogging.jl?branch=master)
 
-MicroLogging is a prototype for a new logging interface for `Base` in julia-0.7.
-For design discussion see the Julep -
-https://github.com/JuliaLang/Juleps/pull/30/files
-
 Logging should be useful and pleasant for the average user and package
 developer, but should meet the efficiency and flexibility demands of production
-deployment.  `MicroLogging` tries to do both in one interface.
+deployment.
+
+MicroLogging is an implementation of the new logging interface introduced in
+`Base` in julia-0.7, and brings most of same features to julia-0.6. See the
+[**Base Documentation**](https://docs.julialang.org/en/v1/stdlib/Logging) for
+an overview. It may also include experimental features which will one day make
+it into the `Logging` standard library.
 
 ## Install
 
@@ -47,7 +49,7 @@ end
 configure_logging(min_level=:debug)
 @debug "Logging enabled at debug level and above"
 for i=1:10
-    @warn "Log suppression iteration $i (max_log=2)" max_log=2
+    @warn "Log suppression iteration $i (maxlog=2)" maxlog=2
 end
 module LogTest
     using MicroLogging
