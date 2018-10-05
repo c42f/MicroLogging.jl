@@ -52,14 +52,13 @@ import MicroLogging.default_metafmt
                                meta_formatter=meta_formatter,
                                show_limited=show_limited,
                                right_justify=right_justify)
+        prev_have_color = Base.have_color
+        # Hack: versions earlier than 0.7 don't respect the IOContext color hint
+        VERSION >= v"0.7" || Base.eval(:(have_color=$color))
         handle_message(logger, level, message, _module, :a_group, :an_id,
                        file, line; kws...)
-        s = String(take!(buf))
-        if VERSION < v"0.7" && !color
-            # Versions earlier than 0.7 don't respect the IOContext color hint
-            s = replace(s, r"\e\[[0-9]+m"=>"")
-        end
-        s
+        VERSION >= v"0.7" || Base.eval(:(have_color=$prev_have_color))
+        String(take!(buf))
     end
 
     # Basic tests for the default setup
