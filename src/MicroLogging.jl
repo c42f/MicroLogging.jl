@@ -50,8 +50,13 @@ if !core_in_base
     include("test.jl")
 end
 
+if VERSION < v"0.7"
+# Init a global logger in 0.6 so that users don't need to do any manual setup.
+# We avoid this in 0.7 and above because Base already has a functional default
+# logger.
 function __init__()
     global_logger(ConsoleLogger(stderr))
+end
 end
 
 end
