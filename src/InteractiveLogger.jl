@@ -1,3 +1,5 @@
+using Compat.Markdown
+
 """
     InteractiveLogger(stream::IO; min_level=Info))
 
@@ -101,6 +103,7 @@ function handle_message(logger::InteractiveLogger, level, msg::AbstractString,
         end
     end
     display_message(logger, level, msg, _module, group, id, filepath, line; kwargs...)
+    nothing
 end
 
 # Print a string with prefixes on each line, and a suffix on the last line
@@ -108,24 +111,29 @@ function print_with_decorations(io, prefixes, decoration_color, str, suffix)
     @assert !isempty(prefixes)
     p = 1
     splitter = r"(\n|\e\[[0-9;]*m)"
-    i = start(str)
-    n = endof(str)
+    i = firstindex(str)
+    n = lastindex(str)
     colorcode = ""
     stylecode = ""
-    print_with_color(decoration_color[1], io, prefixes[p], bold=decoration_color[2])
+    printstyled(io, prefixes[p], bold=decoration_color[2], color=decoration_color[1])
     linelen = length(prefixes[p])
     p == length(prefixes) || (p += 1)
     print(io, colorcode, stylecode)
     while i <= n
-        r = search(str,splitter,i)
-        j = isempty(r) ? n : last(r)
-        linelen += length(SubString(str, i, (isempty(r) ? n : prevind(str,first(r)))))
+        r = findnext(splitter, str, i)
+        @static if VERSION < v"0.7"
+            if isempty(r)
+                r = nothing
+            end
+        end
+        j = (r === nothing) ? n : last(r)
+        linelen += length(SubString(str, i, ((r === nothing) ? n : prevind(str,first(r)))))
         print(io, SubString(str, i, j))
         i = nextind(str,j)
-        if !isempty(r)
+        if r !== nothing
             if str[r[1]] == '\n'
                 !Base.have_color || print(io, "\e[0m")
-                print_with_color(decoration_color[1], io, prefixes[p], bold=decoration_color[2])
+                printstyled(io, prefixes[p], bold=decoration_color[2], color=decoration_color[1])
                 linelen = length(prefixes[p])
                 p == length(prefixes) || (p += 1)
                 !Base.have_color || print(io, "\e[0m")
@@ -151,11 +159,11 @@ function print_with_decorations(io, prefixes, decoration_color, str, suffix)
     if !isempty(suffix)
         width = displaysize(io)[2]
         if length(suffix) > width - linelen
-            print_with_color(decoration_color[1], io, "\n", prefixes[p], bold=decoration_color[2])
+            printstyled(io, "\n", prefixes[p], bold=decoration_color[2], color=decoration_color[1])
             linelen = length(prefixes[p])
         end
         print(io, " "^max(0, (width - linelen - length(suffix))))
-        print_with_color(decoration_color[1], io, suffix, bold=decoration_color[2])
+        printstyled(io, suffix, bold=decoration_color[2], color=decoration_color[1])
     end
 end
 
@@ -178,7 +186,7 @@ function display_message(logger::InteractiveLogger, level, msg::AbstractString,
     width = dsize[2]
     Markdown.term(IOContext(buf, :displaysize=>(dsize[1],width-2)), Markdown.parse(msg))
     msg = String(take!(buf))
-    msg = replace(msg, r"\n(\e\[[0-9]+m)$", s"\1")
+    msg = replace(msg, r"\n(\e\[[0-9]+m)$"=>s"\1")
     msg = rstrip(msg)
 
     if progress === nothing
