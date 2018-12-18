@@ -41,6 +41,8 @@ else
     include("core.jl")
 end
 
+include("StickyMessages.jl")
+
 include("ConsoleLogger.jl")
 include("InteractiveLogger.jl") # deprecated
 

@@ -32,5 +32,6 @@ end
 
 include("config.jl")
 include("ConsoleLogger.jl")
+include("StickyMessages.jl")
 
 end
