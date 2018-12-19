@@ -1,5 +1,5 @@
 """
-    StickyMessages(io::IO; tty=io isa Base.TTY)
+    StickyMessages(io::IO; ansi_codes=io isa Base.TTY && !Sys.iswindows())
 
 A `StickyMessages` type manages the display of a set of persistent "sticky"
 messages in a terminal. That is, messages which are not part of the normal
@@ -12,17 +12,19 @@ the object manipulates the terminal scrolling region.
 """
 mutable struct StickyMessages
     io::IO
-    # Bool for controlling TTY escape codes. Will be deduced from io type by default.
-    tty::Bool
+    # Bool for controlling TTY escape codes.
+    ansi_codes::Bool
     # Messages is just used as a (short) OrderedDict here
     messages::Vector{Pair{Any,String}}
 end
 
-function StickyMessages(io::IO; tty=io isa Base.TTY &&
-                                    # give up on Windows for now, as escape
-                                    # codes seem kinda broken there.
+function StickyMessages(io::IO; ansi_codes=io isa Base.TTY &&
+        # Give up on Windows for now, as libuv doesn't recognize the scroll region code.
+        # Will need to be fixed in libuv and thence julia, but first libuv PR 1884 should merge. See
+        # https://github.com/libuv/libuv/pull/1884
+        # https://github.com/JuliaLang/libuv/commit/ed3700c849289ed01fe04273a7bf865340b2bd7e
                                     !Compat.Sys.iswindows())
-    sticky = StickyMessages(io, tty, Vector{Pair{Any,String}}())
+    sticky = StickyMessages(io, ansi_codes, Vector{Pair{Any,String}}())
     # Ensure we clean up the terminal
     @compat finalizer(empty!, sticky)
     sticky
@@ -80,7 +82,7 @@ function showsticky(io, prev_nlines, messages)
 end
 
 function Base.push!(sticky::StickyMessages, message::Pair)
-    if !sticky.tty
+    if !sticky.ansi_codes
         write(sticky.io, message[2])
         return
     end
@@ -97,7 +99,7 @@ function Base.push!(sticky::StickyMessages, message::Pair)
 end
 
 function Base.pop!(sticky::StickyMessages, label)
-    sticky.tty || return
+    sticky.ansi_codes || return
     idx = Compat.findfirst(m->m[1] == label, sticky.messages)
     if idx !== nothing
         prev_nlines = _countlines(sticky.messages)
@@ -108,7 +110,7 @@ function Base.pop!(sticky::StickyMessages, label)
 end
 
 function Base.empty!(sticky::StickyMessages)
-    sticky.tty || return
+    sticky.ansi_codes || return
     prev_nlines = _countlines(sticky.messages)
     empty!(sticky.messages)
     showsticky(sticky.io, prev_nlines, sticky.messages) # Resets scroll region

@@ -1,9 +1,9 @@
 using MicroLogging: StickyMessages
 
-@testset "Sticky messages without tty" begin
+@testset "Sticky messages without ANSI codes" begin
     buf = IOBuffer()
     # Without TTY, messages are just piped through
-    stickies = StickyMessages(buf, tty=false)
+    stickies = StickyMessages(buf, ansi_codes=false)
     push!(stickies, :a=>"Msg\n")
     @test String(take!(buf)) == "Msg\n"
     push!(stickies, :a=>"Msg\n")
@@ -12,11 +12,11 @@ using MicroLogging: StickyMessages
     @test String(take!(buf)) == ""
 end
 
-@testset "Sticky messages with tty" begin
+@testset "Sticky messages with ANSI codes" begin
     buf = IOBuffer()
     dsize = (20, 80) # Intentionally different from default of 25 rows
     # In TTY mode, we generate various escape codes.
-    stickies = StickyMessages(IOContext(buf, :displaysize=>dsize), tty=true)
+    stickies = StickyMessages(IOContext(buf, :displaysize=>dsize), ansi_codes=true)
     push!(stickies, :a=>"Msg\n")
     @test String(take!(buf)) ==  #scroll    #csr    #pos   #msg #pos
                                 "\e[20;1H\n\e[1;19r\e[20;1HMsg\e[19;1H"
