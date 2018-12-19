@@ -29,12 +29,13 @@ struct ConsoleLogger <: AbstractLogger
     show_limited::Bool
     right_justify::Int
     message_limits::Dict{Any,Int}
+    sticky_messages::StickyMessages
 end
 function ConsoleLogger(stream::IO=stderr, min_level=Info;
                        meta_formatter=default_metafmt, show_limited=true,
                        right_justify=0)
     ConsoleLogger(stream, min_level, meta_formatter,
-                  show_limited, right_justify, Dict{Any,Int}())
+                  show_limited, right_justify, Dict{Any,Int}(), StickyMessages(stream))
 end
 
 shouldlog(logger::ConsoleLogger, level, _module, group, id) =
@@ -96,8 +97,9 @@ function termlength(str)
 end
 
 function handle_message(logger::ConsoleLogger, level, message, _module, group, id,
-                        filepath, line; maxlog=nothing, kwargs...)
-    if maxlog != nothing && maxlog isa Integer
+                        filepath, line; maxlog=nothing, progress=nothing,
+                        sticky=nothing, kwargs...)
+    if maxlog !== nothing && maxlog isa Integer
         remaining = get!(logger.message_limits, id, maxlog)
         logger.message_limits[id] = remaining - 1
         remaining > 0 || return
@@ -129,6 +131,14 @@ function handle_message(logger::ConsoleLogger, level, message, _module, group, i
         end
     end
 
+    if progress !== nothing
+        if (progress isa Symbol && progress == :done) || progress == 1
+            sticky = :done
+        else
+            sticky = true
+        end
+    end
+
     # Format lines as text with appropriate indentation and with a box
     # decoration on the left.
     color,prefix,suffix = logger.meta_formatter(level, _module, group, id, filepath, line)
@@ -154,6 +164,12 @@ function handle_message(logger::ConsoleLogger, level, message, _module, group, i
             printstyled(iob, prefix, " ", bold=true, color=color)
         end
         print(iob, " "^indent, msg)
+        if i == 1 && progress !== nothing
+            progress = clamp(convert(Float64, progress), 0.0, 1.0)
+            barfulllen = dsize[2] - length(boxstr) - length(prefix) - indent - length(msg) - 2
+            barlen = round(Int, barfulllen*progress)
+            print(iob, ' ', '='^barlen, ' '^(barfulllen-barlen))
+        end
         if i == length(msglines) && !isempty(suffix)
             npad = max(0, justify_width - nonpadwidth) + minsuffixpad
             print(iob, " "^npad)
@@ -162,7 +178,16 @@ function handle_message(logger::ConsoleLogger, level, message, _module, group, i
         println(iob)
     end
 
-    write(logger.stream, take!(buf))
+    msg = take!(buf)
+    if sticky !== nothing
+        # Ensure we see the last message, even if it's :done
+        push!(logger.sticky_messages, id=>String(msg))
+        if sticky == :done
+            pop!(logger.sticky_messages, id)
+        end
+    else
+        write(logger.stream, msg)
+    end
     nothing
 end
 
