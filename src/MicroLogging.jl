@@ -13,7 +13,7 @@ export
     ## Log creation
     @debug, @info, @warn, @error, @logmsg,
     ## Logger installation and control
-    with_logger, current_logger, global_logger, disable_logging
+    with_logger, current_logger, global_logger, disable_logging, filterlogs
 
 # ----- MicroLogging & stdlib Logging API -----
 export
@@ -21,6 +21,10 @@ export
     # config system)
     configure_logging,
     ConsoleLogger,
+    SimpleLogFilter,
+    LogLevelFilter,
+    MaxlogFilter,
+    CatchLogErrors,
     InteractiveLogger
 
 import Base.CoreLogging:
@@ -37,6 +41,7 @@ include("StickyMessages.jl")
 include("ConsoleLogger.jl")
 include("InteractiveLogger.jl") # deprecated
 
+include("filters.jl")
 include("config.jl")
 
 end
