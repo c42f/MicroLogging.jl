@@ -1,8 +1,6 @@
 
 abstract type SimpleLogFilter end
 
-# TODO: implement ∘(::SimpleLogFilter, ::SimpleLogFilter)
-
 # Simple filters don't affect early filtering by default
 min_enabled_level(f::SimpleLogFilter) = nothing
 shouldlog(f::SimpleLogFilter, args...; kwargs...) = true
@@ -30,6 +28,16 @@ function handle_message(f::FilteringLogger, args...; kwargs...)
     handle_message(f.filter, f.parent, args...; kwargs...)
 end
 
+
+struct ComposedLogFilter{F,G} <: SimpleLogFilter
+    filter1::F
+    filter2::G
+end
+
+Base.:∘(f1::SimpleLogFilter, f2::SimpleLogFilter) = ComposedLogFilter(f1, f2)
+
+FilteringLogger(parent::AbstractLogger, f::ComposedLogFilter) =
+    FilteringLogger(FilteringLogger(parent, f.filter2), f.filter1)
 
 #-------------------------------------------------------------------------------
 
