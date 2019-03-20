@@ -21,7 +21,7 @@ export
     # config system)
     configure_logging,
     ConsoleLogger,
-    SimpleLogFilter,
+    AbstractLogFilter,
     LogLevelFilter,
     MaxlogFilter,
     CatchLogErrors,
