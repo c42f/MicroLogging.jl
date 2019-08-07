@@ -23,10 +23,10 @@ function StickyMessages(io::IO; ansi_codes=io isa Base.TTY &&
         # Will need to be fixed in libuv and thence julia, but first libuv PR 1884 should merge. See
         # https://github.com/libuv/libuv/pull/1884
         # https://github.com/JuliaLang/libuv/commit/ed3700c849289ed01fe04273a7bf865340b2bd7e
-                                    !Compat.Sys.iswindows())
+                                    !Sys.iswindows())
     sticky = StickyMessages(io, ansi_codes, Vector{Pair{Any,String}}())
     # Ensure we clean up the terminal
-    @compat finalizer(empty!, sticky)
+    finalizer(empty!, sticky)
     sticky
 end
 
@@ -89,7 +89,7 @@ function Base.push!(sticky::StickyMessages, message::Pair)
     label,text = message
     endswith(text, '\n') || (text *= '\n';)
     prev_nlines = _countlines(sticky.messages)
-    idx = Compat.findfirst(m->m[1] == label, sticky.messages)
+    idx = findfirst(m->m[1] == label, sticky.messages)
     if idx === nothing
         push!(sticky.messages, label=>text)
     else
@@ -100,7 +100,7 @@ end
 
 function Base.pop!(sticky::StickyMessages, label)
     sticky.ansi_codes || return
-    idx = Compat.findfirst(m->m[1] == label, sticky.messages)
+    idx = findfirst(m->m[1] == label, sticky.messages)
     if idx !== nothing
         prev_nlines = _countlines(sticky.messages)
         deleteat!(sticky.messages, idx)

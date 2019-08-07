@@ -1,4 +1,4 @@
-using Compat.Markdown
+using Markdown
 
 """
     InteractiveLogger(stream::IO; min_level=Info))
