@@ -196,7 +196,7 @@ import MicroLogging.default_metafmt
         │     2.00002  2.00002  2.00002  2.00002     2.00002  2.00002  2.00002
         │     2.00002  2.00002  2.00002  2.00002     2.00002  2.00002  2.00002
         └ SUFFIX
-        """, "EOL"=>"") # EOL hack to work around git whitespace errors
+        """, (VERSION < v"1.4" ? "EOL" : "       EOL")=>"") # EOL hack to work around git whitespace errors
         # Limiting the amount which is printed
         @test genmsg("msg", a=fill(1.00001, 10,10), show_limited=false) ==
         """
