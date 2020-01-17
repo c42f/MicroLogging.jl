@@ -4,20 +4,32 @@
 
 [![codecov.io](http://codecov.io/github/c42f/MicroLogging.jl/coverage.svg?branch=master)](http://codecov.io/github/c42f/MicroLogging.jl?branch=master)
 
-Logging should be useful and pleasant for the average user and package
-developer, but should meet the efficiency and flexibility demands of production
-deployment.
+MicroLogging is the prototype implementation of the logging *frontend*
+interface which was ported to `Base` in julia-0.7, and brought most of same
+features to julia-0.6. See the [**Base Documentation**](https://docs.julialang.org/en/v1/stdlib/Logging)
+for an overview of the logging frontend.
 
-MicroLogging is an implementation of the new logging interface introduced in
-`Base` in julia-0.7, and brings most of same features to julia-0.6. See the
-[**Base Documentation**](https://docs.julialang.org/en/v1/stdlib/Logging) for
-an overview. It may also include experimental features which will one day make
-it into the `Logging` standard library.
+As of the start of 2020, MicroLogging contains some bits and pieces for logging
+backends, but is somewhat dormant. Here are some libraries from the ecosystem
+which I hope will eventually mature into a composable system for log routing,
+storage and pretty printing:
+
+* The Base `Logging` library provides a default backend for pretty printing log
+  records in the terminal.
+* [`LoggingExtras.jl`](https://github.com/oxinabox/LoggingExtras.jl) provides
+  generic log routing functionality.
+* [`TerminalLoggers.jl`](https://github.com/c42f/TerminalLoggers.jl) is an
+  experimental library for more advanced terminal-based pretty printing of log
+  records.
+* [`TensorBoardLogger.jl`](https://github.com/PhilipVinc/TensorBoardLogger.jl)
+  for logging structured numeric data to
+  [TensorBoard](https://www.tensorflow.org/tensorboard) as a backend.
+
 
 ## Install
 
 ```julia
-Pkg.add("MicroLogging")
+pkg> add MicroLogging
 ```
 
 ## Quickstart Example
@@ -34,6 +46,7 @@ x = [1 2;3 4]
 @info "Support for key value pairs" x a=1 b="asdf"
 
 #-------------------------------------------------------------------------------
+global_logger(ConsoleLogger(stderr, MicroLogging.Info))
 @info "# Progress logging"
 for i=1:100
     sleep(0.01)
@@ -84,17 +97,6 @@ end
 configure_logging(min_level=:info)
 nothing
 ```
-
-The script above produces console output like the following.
-`InteractiveLogger` tries to put the metadata out of your way as much as
-possible by placing it on the right hand of the terminal.
-
-![Micrologging example screenshot](doc/micrologging_example.png)
-
-Notice that the message part of each log record is interpreted as markdown by
-convention to allow for readable log formatting with various backends.  If you
-want to transport data, you should send it through as a user defined key value
-pair rather than interpolating it into the log message itself.
 
 
 ## MicroLogging implementation choices

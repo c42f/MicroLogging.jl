@@ -32,6 +32,8 @@ import Base.CoreLogging:
     SimpleLogger, LogState,
     with_logger, current_logger, global_logger, disable_logging
 
+import Logging
+
 include("StickyMessages.jl")
 
 include("ConsoleLogger.jl")
