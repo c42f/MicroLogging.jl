@@ -1,3 +1,5 @@
+import Logging
+
 @testset "Logger configuration" begin
     logs = let
         logger = TestLogger(min_level=Debug)
@@ -29,6 +31,20 @@
     @test length(logs) == 2
     @test occursin((Debug, "a"), logs[1])
     @test occursin((Info , "b"), logs[2])
+end
+
+@testset "configure_logging implementations" begin
+    lg1 = ConsoleLogger(stderr, Info)
+    lg2 = configure_logging(lg1, min_level=Warn)
+    @test lg2.min_level == Warn
+    lg3 = configure_logging(lg1, min_level=:warn)
+    @test lg3.min_level == Warn
+
+    lg1 = Logging.ConsoleLogger(stderr, Info)
+    lg2 = configure_logging(lg1, min_level=Warn)
+    @test lg2.min_level == Warn
+    lg3 = configure_logging(lg1, min_level=:warn)
+    @test lg3.min_level == Warn
 end
 
 @testset "disable_logging with parse_level" begin
