@@ -1,6 +1,6 @@
 name = "MicroLogging"
 uuid = "cecf6091-0e4e-54ba-8cba-f0e96a51f282"
-version = "0.3.3"
+version = "0.4.0"
 
 [deps]
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
