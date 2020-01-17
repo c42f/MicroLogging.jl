@@ -55,6 +55,14 @@ function configure_logging(logger::ConsoleLogger, _module=nothing;
     end
     =#
     ConsoleLogger(logger.stream, min_level, logger.meta_formatter,
+                  logger.show_limited, logger.right_justify, logger.message_limits,
+                  logger.sticky_messages)
+end
+
+# NB: ConsoleLogger and Logging.ConsoleLogger are different!!
+function configure_logging(logger::Logging.ConsoleLogger; min_level=Info)
+    min_level = parse_level(min_level)
+    Logging.ConsoleLogger(logger.stream, min_level, logger.meta_formatter,
                   logger.show_limited, logger.right_justify, logger.message_limits)
 end
 
