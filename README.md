@@ -21,6 +21,12 @@ library provides a default logger `ConsoleLogger` for some basic filtering and
 pretty printing of log records in the terminal.  It combines convenient but
 non-composable features into a single logger type.
 
+### Frontend extensions
+
+* [`ProgressLogging.jl`](https://github.com/JunoLab/ProgressLogging.jl)
+  provides some convenient frontend macros including `@progress` which makes it
+  easy to emit log records tracking the progress of looping constructs.
+
 ### Routing and transformation
 
 * [`LoggingExtras.jl`](https://github.com/oxinabox/LoggingExtras.jl) provides
