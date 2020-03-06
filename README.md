@@ -9,22 +9,37 @@ interface which was ported to `Base` in julia-0.7, and brought most of same
 features to julia-0.6. See the [**Base Documentation**](https://docs.julialang.org/en/v1/stdlib/Logging)
 for an overview of the logging frontend.
 
+## Julia Logging Ecosystem
+
 As of the start of 2020, MicroLogging contains some bits and pieces for logging
-backends, but is somewhat dormant. Here are some libraries from the ecosystem
-which I hope will eventually mature into a composable system for log routing,
-storage and pretty printing:
+backends, but is somewhat dormant. However, I'm maintaining the following list
+of libraries from the ecosystem which I hope will eventually mature into a
+composable system for log routing, storage and pretty printing.
 
-* The Base `Logging` library provides a default backend for pretty printing log
-  records in the terminal.
+First off, the standard [`Logging`](https://docs.julialang.org/en/v1/stdlib/Logging)
+library provides a default logger `ConsoleLogger` for some basic filtering and
+pretty printing of log records in the terminal.  It combines convenient but
+non-composable features into a single logger type.
+
+### Routing and transformation
+
 * [`LoggingExtras.jl`](https://github.com/oxinabox/LoggingExtras.jl) provides
-  generic log routing functionality.
-* [`TerminalLoggers.jl`](https://github.com/c42f/TerminalLoggers.jl) is an
-  experimental library for more advanced terminal-based pretty printing of log
-  records.
-* [`TensorBoardLogger.jl`](https://github.com/PhilipVinc/TensorBoardLogger.jl)
-  for logging structured numeric data to
-  [TensorBoard](https://www.tensorflow.org/tensorboard) as a backend.
+  generic log transformation, filtering and routing functionality. You can use
+  this to mutate messages as they go through the chain, duplicate a stream of
+  log records into multiple streams, discard messages based on a predicate, etc.
 
+### Sinks
+
+* [`TerminalLoggers.jl`](https://github.com/c42f/TerminalLoggers.jl) is a
+  library for advanced terminal-based pretty printing of log records, including
+  fancy progress bars and markdown formatting.
+* [`TensorBoardLogger.jl`](https://github.com/PhilipVinc/TensorBoardLogger.jl)
+  can log structured numeric data to
+  [TensorBoard](https://www.tensorflow.org/tensorboard) as a backend.
+* [`LogRoller.jl`](https://github.com/tanmaykm/LogRoller.jl) has a backend for
+  rotating log files once they hit a size limit.
+* [`LoggingExtras.jl`](https://github.com/oxinabox/LoggingExtras.jl) provides a
+  simple `FileLogger` sink.
 
 ## Install
 
